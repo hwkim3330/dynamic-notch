@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key><string>com.hwkim3330.dynamicnotch</string>
+	<key>CFBundleName</key><string>Dynamic Notch</string>
+	<key>CFBundleDisplayName</key><string>Dynamic Notch</string>
+	<key>CFBundleExecutable</key><string>DynamicNotch</string>
+	<key>CFBundleIconFile</key><string>AppIcon</string>
+	<key>CFBundlePackageType</key><string>APPL</string>
+	<key>CFBundleShortVersionString</key><string>1.0</string>
+	<key>CFBundleVersion</key><string>1</string>
+	<key>LSMinimumSystemVersion</key><string>14.0</string>
+	<key>LSUIElement</key><true/>
+	<key>NSHighResolutionCapable</key><true/>
+	<key>NSAppleEventsUsageDescription</key><string>Music·Spotify의 곡 정보, 앨범아트를 가져오고 재생을 제어합니다.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key><string>AirPods 등 블루투스 기기 연결을 노치에 표시합니다.</string>
+</dict>
+</plist>

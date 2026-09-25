@@ -1,0 +1,385 @@
+import SwiftUI
+
+// MARK: - 공용 조각
+
+struct ArtworkView: View {
+    let image: CGImage?
+    let tint: Color
+    let side: CGFloat
+    let radius: CGFloat
+
+    var body: some View {
+        ZStack {
+            if let image {
+                Image(decorative: image, scale: 1).resizable().aspectRatio(contentMode: .fill)
+            } else {
+                LinearGradient(colors: [tint.opacity(0.9), tint.opacity(0.35)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+                Image(systemName: "music.note").font(.system(size: side * 0.45, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+            }
+        }
+        .frame(width: side, height: side)
+        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+    }
+}
+
+/// 재생 중 파형 (오디오를 직접 탭하지 않고 부드러운 노이즈로 움직임)
+struct Waveform: View {
+    var color: Color
+    var active: Bool
+    var bars = 5
+    var height: CGFloat = 16
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: !active)) { tl in
+            let t = tl.date.timeIntervalSinceReferenceDate
+            HStack(alignment: .center, spacing: 2.2) {
+                ForEach(0..<bars, id: \.self) { i in
+                    Capsule().fill(color)
+                        .frame(width: 3, height: barHeight(i, t))
+                }
+            }
+            .frame(height: height)
+        }
+    }
+
+    private func barHeight(_ i: Int, _ t: Double) -> CGFloat {
+        guard active else { return 3 }
+        let d = Double(i)
+        let a = sin(t * (6.1 + d * 1.73) + d * 1.3)
+        let b = sin(t * (2.9 + d * 0.87) + d * 2.4)
+        let c = sin(t * 11.3 + d * 0.7) * 0.25
+        let v = min(1, abs(a * 0.7 + b * 0.5 + c))
+        return 3 + (height - 3) * CGFloat(v)
+    }
+}
+
+func formatTime(_ t: TimeInterval) -> String {
+    let s = max(0, Int(t.rounded(.down)))
+    return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60)
+                     : String(format: "%d:%02d", s / 60, s % 60)
+}
+
+/// 노치 좌우 날개에 내용을 배치하는 컨테이너 (가운데는 카메라가 있는 물리 노치)
+struct Wings<L: View, R: View>: View {
+    @Environment(\.notchSize) var n
+    var inset: CGFloat = 10
+    @ViewBuilder var left: L
+    @ViewBuilder var right: R
+
+    var body: some View {
+        HStack(spacing: 0) {
+            left.frame(maxWidth: .infinity, alignment: .leading)
+            Color.clear.frame(width: n.width - inset)
+            right.frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .padding(.horizontal, inset)
+        .frame(height: n.height)
+    }
+}
+
+// MARK: - 컴팩트
+
+struct CompactMusicView: View {
+    @Environment(\.notchSize) var n
+    let media: NowPlaying
+
+    var body: some View {
+        Wings {
+            ArtworkView(image: media.artwork, tint: media.tint, side: n.height - 12, radius: 6)
+        } right: {
+            Waveform(color: media.tint, active: media.isPlaying, height: n.height * 0.45)
+        }
+    }
+}
+
+struct CompactCallView: View {
+    let since: Date
+    var body: some View {
+        Wings {
+            TimelineView(.periodic(from: since, by: 1)) { tl in
+                HStack(spacing: 5) {
+                    Image(systemName: "phone.fill").font(.system(size: 11, weight: .bold))
+                    Text(formatTime(tl.date.timeIntervalSince(since)))
+                        .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                }
+                .foregroundStyle(.green)
+                .fixedSize()
+            }
+        } right: {
+            Waveform(color: .green, active: true, bars: 6, height: 14)
+        }
+    }
+}
+
+// MARK: - 통화 수신
+
+struct RingingCallView: View {
+    @Environment(\.notchSize) var n
+    let name: String
+    let subtitle: String
+    let accept: () -> Void
+    let decline: () -> Void
+    @State private var pulse = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle().fill(LinearGradient(colors: [.gray.opacity(0.9), .gray.opacity(0.5)],
+                                             startPoint: .top, endPoint: .bottom))
+                Text(String(name.prefix(1))).font(.system(size: 20, weight: .semibold)).foregroundStyle(.white)
+            }
+            .frame(width: 44, height: 44)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(subtitle).font(.system(size: 12)).foregroundStyle(.white.opacity(0.55))
+                Text(name).font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
+            }
+            Spacer(minLength: 8)
+            CircleButton(symbol: "phone.down.fill", color: .red, action: decline)
+            CircleButton(symbol: "phone.fill", color: .green, action: accept)
+                .scaleEffect(pulse ? 1.07 : 1)
+                .animation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true), value: pulse)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, n.height + 2)
+        .onAppear { pulse = true }
+    }
+}
+
+struct CircleButton: View {
+    let symbol: String
+    let color: Color
+    var size: CGFloat = 40
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: size * 0.42, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: size, height: size)
+                .background(Circle().fill(color))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - 일시 알림
+
+struct TransientView: View {
+    @Environment(\.notchSize) var n
+    let transient: Transient
+
+    var body: some View {
+        switch transient {
+        case .volume(let level, let muted):
+            Wings {
+                Image(systemName: volumeSymbol(level, muted))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .contentTransition(.symbolEffect(.replace))
+            } right: {
+                Bar(value: muted ? 0 : level, color: .white).frame(width: 64)
+            }
+        case .battery(let level, let charging, let plugged):
+            Wings {
+                Text(plugged ? (charging ? "충전 중" : "전원 연결됨") : "배터리 사용")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(plugged ? .green : .white)
+                    .lineLimit(1).fixedSize()
+            } right: {
+                HStack(spacing: 5) {
+                    Text("\(level)%").font(.system(size: 13, weight: .semibold).monospacedDigit())
+                    Image(systemName: batterySymbol(level, charging))
+                        .font(.system(size: 17))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(level <= 20 && !plugged ? .red : .green, .white.opacity(0.5))
+                }
+                .foregroundStyle(plugged ? .green : .white)
+                .fixedSize()
+            }
+        case .unlock(let ok):
+            VStack {
+                Image(systemName: ok ? "lock.open.fill" : "lock.fill")
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundStyle(ok ? .green : .white)
+                    .contentTransition(.symbolEffect(.replace))
+                    .symbolEffect(.bounce, value: ok)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, n.height + 6)
+        case .faceID(let ok):
+            VStack {
+                Image(systemName: ok ? "face.smiling" : "faceid")
+                    .font(.system(size: 34, weight: .regular))
+                    .foregroundStyle(ok ? .green : .white)
+                    .contentTransition(.symbolEffect(.replace))
+                    .symbolEffect(.pulse, isActive: !ok)
+                    .symbolEffect(.bounce, value: ok)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, n.height + 2)
+        case .device(let name, let symbol, let connected):
+            HStack(spacing: 12) {
+                Image(systemName: symbol)
+                    .font(.system(size: 26))
+                    .foregroundStyle(.white)
+                    .frame(width: 36)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(name).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+                    Text(connected ? "연결됨" : "연결 해제됨").font(.system(size: 12))
+                        .foregroundStyle(connected ? .green : .white.opacity(0.5))
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, n.height + 4)
+        }
+    }
+
+    private func volumeSymbol(_ v: Double, _ muted: Bool) -> String {
+        if muted || v <= 0.001 { return "speaker.slash.fill" }
+        return v < 0.33 ? "speaker.wave.1.fill" : v < 0.66 ? "speaker.wave.2.fill" : "speaker.wave.3.fill"
+    }
+}
+
+func batterySymbol(_ level: Int, _ charging: Bool) -> String {
+    if charging { return "battery.100percent.bolt" }
+    switch level {
+    case ..<13: return "battery.0percent"
+    case ..<38: return "battery.25percent"
+    case ..<63: return "battery.50percent"
+    case ..<88: return "battery.75percent"
+    default: return "battery.100percent"
+    }
+}
+
+struct Bar: View {
+    var value: Double
+    var color: Color
+    var body: some View {
+        GeometryReader { g in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.white.opacity(0.18))
+                Capsule().fill(color).frame(width: max(0, min(1, value)) * g.size.width)
+            }
+        }
+        .frame(height: 5)
+    }
+}
+
+// MARK: - 펼침
+
+struct ExpandedMusicView: View {
+    @Environment(\.notchSize) var n
+    let media: NowPlaying
+    weak var controls: NotchControls?
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                ArtworkView(image: media.artwork, tint: media.tint, side: 58, radius: 12)
+                    .shadow(color: media.tint.opacity(0.4), radius: 8)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(media.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+                    Text(media.artist).font(.system(size: 13)).foregroundStyle(.white.opacity(0.6))
+                }
+                .lineLimit(1)
+                Spacer(minLength: 8)
+                Waveform(color: media.tint, active: media.isPlaying, bars: 6, height: 22)
+            }
+            TimelineView(.periodic(from: .now, by: 0.5)) { tl in
+                let pos = media.position(at: tl.date)
+                HStack(spacing: 8) {
+                    Text(formatTime(pos))
+                    Bar(value: media.duration > 0 ? pos / media.duration : 0, color: .white.opacity(0.9))
+                    Text(media.duration > 0 ? "-" + formatTime(media.duration - pos) : "--:--")
+                }
+                .font(.system(size: 11, weight: .medium).monospacedDigit())
+                .foregroundStyle(.white.opacity(0.55))
+            }
+            HStack(spacing: 44) {
+                ControlButton(symbol: "backward.fill", size: 18) { controls?.previousTrack() }
+                ControlButton(symbol: media.isPlaying ? "pause.fill" : "play.fill", size: 24) { controls?.playPause() }
+                ControlButton(symbol: "forward.fill", size: 18) { controls?.nextTrack() }
+            }
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, n.height + 4)
+    }
+}
+
+struct ControlButton: View {
+    let symbol: String
+    let size: CGFloat
+    let action: () -> Void
+    @State private var hover = false
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: size, weight: .semibold))
+                .foregroundStyle(.white)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 40, height: 30)
+                .background(Circle().fill(.white.opacity(hover ? 0.14 : 0)).frame(width: 38, height: 38))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+    }
+}
+
+struct ExpandedHomeView: View {
+    @Environment(\.notchSize) var n
+    let battery: BatteryInfo?
+    let volume: Double
+    let call: CallState?
+    let endCall: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            TimelineView(.periodic(from: .now, by: 1)) { tl in
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(tl.date, format: .dateTime.month(.wide).day().weekday(.wide))
+                        .font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.55))
+                    Text(tl.date, format: .dateTime.hour().minute())
+                        .font(.system(size: 30, weight: .semibold).monospacedDigit()).foregroundStyle(.white)
+                }
+            }
+            Spacer()
+            if case .active(let name, _) = call {
+                VStack(spacing: 3) {
+                    CircleButton(symbol: "phone.down.fill", color: .red, size: 34, action: endCall)
+                    Text(name).font(.system(size: 10)).foregroundStyle(.white.opacity(0.6))
+                }
+            }
+            Ring(value: volume, color: .white, symbol: "speaker.wave.2.fill", label: "\(Int(volume * 100))%")
+            if let b = battery {
+                Ring(value: Double(b.level) / 100, color: b.pluggedIn ? .green : (b.level <= 20 ? .red : .white),
+                     symbol: b.charging ? "bolt.fill" : "battery.100percent", label: "\(b.level)%")
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, n.height + 2)
+    }
+}
+
+struct Ring: View {
+    let value: Double
+    let color: Color
+    let symbol: String
+    let label: String
+    var body: some View {
+        VStack(spacing: 3) {
+            ZStack {
+                Circle().stroke(Color.white.opacity(0.15), lineWidth: 4)
+                Circle().trim(from: 0, to: max(0.001, min(1, value)))
+                    .stroke(color, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Image(systemName: symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(color)
+            }
+            .frame(width: 34, height: 34)
+            Text(label).font(.system(size: 10, weight: .medium).monospacedDigit()).foregroundStyle(.white.opacity(0.6))
+        }
+    }
+}
