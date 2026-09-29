@@ -151,34 +151,42 @@ final class SensorProvider {
 // MARK: - 다운로드 완료
 
 /// ~/Downloads 에 새 파일이 다 받아지면 알린다 (Chrome, Safari 등 브라우저 무관)
-@MainActor
-final class DownloadsProvider {
-    private let model: NotchModel
+/// Downloads 폴더는 TCC 보호 대상이라 첫 접근 때 권한 창이 뜨고 그동안 호출이 멈춘다.
+/// 그래서 폴더 접근은 전부 백그라운드 큐에서 하고, 알림만 메인으로 넘긴다.
+final class DownloadsProvider: @unchecked Sendable {
+    private weak var model: NotchModel?
     private let dir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads")
+    private let queue = DispatchQueue(label: "dynamicnotch.downloads")
     private var known: Set<String> = []
     private var source: DispatchSourceFileSystemObject?
     private var pending: [String: (size: UInt64, seen: Int)] = [:]
-    private var timer: Timer?
+    private var timer: DispatchSourceTimer?
 
     static let partial = ["crdownload", "download", "part", "partial", "tmp"]
 
-    init(model: NotchModel) {
+    @MainActor init(model: NotchModel) {
         self.model = model
-        known = Set(list())
         model.onRevealFile = { path in
             NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
         }
+        queue.async { self.start() }
+    }
+
+    private func start() {
+        known = Set(list())
         let fd = open(dir.path, O_EVTONLY)
         guard fd >= 0 else { return }
-        let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: .write, queue: .main)
-        src.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.changed() } }
+        let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: .write, queue: queue)
+        src.setEventHandler { [weak self] in self?.changed() }
         src.setCancelHandler { close(fd) }
         src.resume()
         source = src
         // 크기가 두 번 연속 같으면 다 받은 것으로 본다
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.settle() }
-        }
+        let t = DispatchSource.makeTimerSource(queue: queue)
+        t.schedule(deadline: .now() + 1, repeating: 1)
+        t.setEventHandler { [weak self] in self?.settle() }
+        t.resume()
+        timer = t
     }
 
     private func list() -> [String] {
@@ -202,7 +210,9 @@ final class DownloadsProvider {
             if size == st.size, size > 0 {
                 if st.seen >= 1 {
                     pending[name] = nil
-                    model.show(.download(name: name, path: path), for: 3.2)
+                    DispatchQueue.main.async { [weak self] in
+                        MainActor.assumeIsolated { self?.model?.show(.download(name: name, path: path), for: 3.2) }
+                    }
                 } else { pending[name] = (size, st.seen + 1) }
             } else { pending[name] = (size, 0) }
         }
