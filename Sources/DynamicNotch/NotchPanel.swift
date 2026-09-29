@@ -62,12 +62,17 @@ final class NotchPanel: NSPanel {
 
     /// 노치가 있는 내장 화면을 우선, 없으면 메인 화면에 가상 노치
     func reposition() {
-        let screen = NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main ?? NSScreen.screens[0]
+        // DYNAMICNOTCH_NO_NOTCH=1 이면 노치 없는 맥(맥북 네오, 외장 모니터 등)처럼 동작 — 테스트용
+        let forceNoNotch = ProcessInfo.processInfo.environment["DYNAMICNOTCH_NO_NOTCH"] != nil
+        let screen = (forceNoNotch ? nil : NSScreen.screens.first { $0.safeAreaInsets.top > 0 })
+            ?? NSScreen.main ?? NSScreen.screens[0]
         screenRef = screen
         let f = screen.frame
         var size = CGSize(width: 190, height: 32)
         var centerX = f.midX
-        if screen.safeAreaInsets.top > 0,
+        let notched = !forceNoNotch && screen.safeAreaInsets.top > 0
+        model.hasPhysicalNotch = notched
+        if notched,
            let l = screen.auxiliaryTopLeftArea, let r = screen.auxiliaryTopRightArea {
             size = CGSize(width: r.minX - l.maxX, height: screen.safeAreaInsets.top)
             centerX = (l.maxX + r.minX) / 2

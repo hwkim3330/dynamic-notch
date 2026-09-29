@@ -71,7 +71,9 @@
 ./scripts/build-app.sh --demo   # 실행하면서 영상 속 장면을 데모로 재생
 ```
 
-Xcode 26 / Swift 6.3, macOS 14 이상 (Apple Silicon)이 필요하다. 서명은 ad-hoc이다.
+Xcode 26 / Swift 6.3이 필요하다. macOS 14 이상의 Apple Silicon·인텔 맥에서 돈다(유니버설 빌드). 서명은 ad-hoc이다.
+
+**노치 없는 맥** (맥북 네오, 에어/프로 구형, 외장 모니터): 화면 위 가운데에 가상 노치를 쓴다. 쉴 때는 아무것도 안 보이고, 활동이 생기면 위에서 알약 모양으로 내려온다. `DYNAMICNOTCH_NO_NOTCH=1`로 노치 있는 맥에서도 이 모드를 시험할 수 있다.
 
 처음 쓸 때 묻는 권한:
 - **자동화 (Music / Spotify)**: 앨범아트, 재생 위치, 재생 제어에 쓴다

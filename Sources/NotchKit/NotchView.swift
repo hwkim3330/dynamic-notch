@@ -22,6 +22,9 @@ public struct NotchView: View {
         }
         .frame(width: l.outerSize.width, height: l.outerSize.height, alignment: .top)
         .mask(shape)
+        // 노치 없는 화면: 쉬는 동안엔 안 보이게 (위로 말려 올라감)
+        .opacity(!model.hasPhysicalNotch && content == .idle ? 0 : 1)
+        .offset(y: !model.hasPhysicalNotch && content == .idle ? -l.outerSize.height : 0)
         .background(alignment: .top) { Glow(color: glowColor(content), shape: shape) }
         .contentShape(shape)
         .onTapGesture { tapped(content) }

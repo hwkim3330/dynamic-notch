@@ -190,6 +190,8 @@ public protocol NotchControls: AnyObject {
 public final class NotchModel: ObservableObject {
     /// 물리 노치 크기(pt). 노치 없는 화면이면 가상의 노치.
     @Published public var notchSize = CGSize(width: 185, height: 32)
+    /// 실제 노치가 있는 화면인지. 없으면 평소엔 숨어 있다가 알림이 올 때만 위에서 내려온다.
+    @Published public var hasPhysicalNotch = true
     @Published public var nowPlaying: NowPlaying?
     @Published public var demoNowPlaying: NowPlaying?
     @Published public var call: CallState?

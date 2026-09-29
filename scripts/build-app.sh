@@ -5,8 +5,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-swift build -c release --arch arm64
-BIN=.build/arm64-apple-macosx/release/DynamicNotch
+# Apple Silicon + Intel 유니버설
+swift build -c release --arch arm64 --arch x86_64
+BIN=$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/DynamicNotch
 APP=build/DynamicNotch.app
 
 rm -rf "$APP"
