@@ -29,6 +29,35 @@ enum ClaudeHook {
         exit(0)
     }
 
+    /// 상태 줄 모드: Claude Code 가 주는 상태 JSON 에서 구독 한도를 앱으로 넘기고, 짧은 상태 줄을 출력한다
+    static func statusLine() -> Never {
+        let data = FileHandle.standardInput.readDataToEndOfFile()
+        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        let rl = json["rate_limits"] as? [String: Any] ?? [:]
+        func win(_ k: String) -> (Double, Double)? {
+            guard let w = rl[k] as? [String: Any], let p = (w["used_percentage"] as? NSNumber)?.doubleValue else { return nil }
+            return (p, (w["resets_at"] as? NSNumber)?.doubleValue ?? 0)
+        }
+        var info: [String: String] = ["event": "Limits"]
+        var parts: [String] = []
+        if let m = json["model"] as? [String: Any], let name = m["display_name"] as? String { parts.append(name) }
+        if let (p, r) = win("five_hour") {
+            info["five"] = String(p); info["fiveReset"] = String(r)
+            let left = max(0, r - Date().timeIntervalSince1970)
+            parts.append("5h \(Int(p.rounded()))%" + (r > 0 ? " (\(Int(left) / 3600)h\(Int(left) % 3600 / 60)m)" : ""))
+        }
+        if let (p, r) = win("seven_day") {
+            info["week"] = String(p); info["weekReset"] = String(r)
+            parts.append("주간 \(Int(p.rounded()))%")
+        }
+        if info.count > 1 {
+            DistributedNotificationCenter.default().postNotificationName(
+                notification, object: nil, userInfo: info, deliverImmediately: true)
+        }
+        print(parts.joined(separator: " · "))
+        exit(0)
+    }
+
     /// 훅 프로세스는 stdin 이 파이프라 tty 가 없다. 부모(셸 → claude)를 거슬러 올라가 첫 tty 를 찾는다.
     static func controllingTTY() -> String? {
         var pid = getppid()
@@ -132,6 +161,7 @@ final class ClaudeProvider {
     ]
 
     private func handle(_ i: [String: String]) {
+        if i["event"] == "Limits" { updateLimits(i); return }
         let id = i["session"] ?? ""
         guard !id.isEmpty else { return }
         let project = URL(fileURLWithPath: i["cwd"] ?? "").lastPathComponent
@@ -179,6 +209,23 @@ final class ClaudeProvider {
             return
         }
         model.upsert(s)
+    }
+
+    private func updateLimits(_ i: [String: String]) {
+        func d(_ k: String) -> Double? { i[k].flatMap(Double.init) }
+        func date(_ k: String) -> Date? { d(k).flatMap { $0 > 0 ? Date(timeIntervalSince1970: $0) : nil } }
+        let old = model.limits?.fiveHour ?? 0
+        let l = PlanLimits(fiveHour: d("five"), fiveHourResets: date("fiveReset"), week: d("week"), weekResets: date("weekReset"))
+        model.limits = l
+        // 80%, 95% 를 처음 넘을 때 한 번 알린다
+        if let now = l.fiveHour, let t = [95.0, 80.0].first(where: { now >= $0 && old < $0 }) {
+            var detail = ""
+            if let r = l.fiveHourResets {
+                let m = max(0, Int(r.timeIntervalSinceNow / 60))
+                detail = "\(m / 60)시간 \(m % 60)분 후 초기화"
+            }
+            model.show(.claude(title: "5시간 사용량 \(Int(t))%", project: "", detail: detail, mood: .attention), for: 4)
+        }
     }
 
     /// 이벤트가 오래 없는 세션 정리 (터미널을 그냥 닫은 경우 등)

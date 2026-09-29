@@ -16,6 +16,7 @@
 | 🪟 **여러 창** | 세션마다 터미널 tty를 기억한다. 펼친 목록에서 누르면 Terminal/iTerm2의 바로 그 탭으로 이동한다 (그 밖의 터미널은 앱만 앞으로 가져온다) |
 | ⬇️ **다운로드** | Chrome, Safari 등 브라우저와 상관없이 `~/Downloads`에 파일 받기가 끝나면 알린다. 누르면 Finder에서 보여준다 |
 | 🖥 **RustDesk** | 누군가 이 맥에 원격 접속하면 빨간 표시로 알린다 |
+| 📊 **사용량** | 5시간·주간 구독 한도(%)와 초기화까지 남은 시간, 오늘/5시간/7일 토큰을 API 가격으로 환산한 금액, 24시간 막대, 모델별 합계, Codex 토큰을 보여준다. 5시간 한도가 80%·95%를 넘으면 알린다 |
 | 📷 **미러** | 노치(카메라 자리)에서 바로 내장 카메라 미리보기를 연다. 미러를 연 동안에만 카메라가 켜진다 |
 | 🟢 **카메라·마이크 감지** | 다른 앱이 카메라나 마이크를 켜고 끄면 노치에 표시한다 |
 | 🎵 **음악** | Music, Spotify 재생 중이면 앨범아트와 파형이 나오고, 펼치면 플레이어가 된다 |
@@ -41,6 +42,13 @@
     "Notification": [ "…" ], "Stop": [ "…" ], "SessionEnd": [ "…" ]
   }
 }
+```
+
+구독 한도는 Claude Code 상태 줄 JSON의 `rate_limits`에서만 공식적으로 얻을 수 있다. 그래서 상태 줄도 앱으로 연결한다. 터미널 아래에 `Opus 5.5 · 5h 42% (1h23m) · 주간 31%` 같은 한 줄이 생긴다.
+
+```json
+"statusLine": { "type": "command", "refreshInterval": 60,
+  "command": "H=\"$HOME/Applications/DynamicNotch.app/Contents/MacOS/DynamicNotch\"; [ -x \"$H\" ] && \"$H\" --statusline 2>/dev/null || true" }
 ```
 
 ## 빌드 / 실행

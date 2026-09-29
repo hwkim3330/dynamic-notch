@@ -131,6 +131,8 @@ private struct ExpandedView: View {
                     if let m = model.media { ExpandedMusicView(media: m, controls: model.controls) }
                 case .camera:
                     CameraPanel(make: model.cameraView)
+                case .usage:
+                    UsagePanel(usage: model.usage, limits: model.limits)
                 }
             }
             .id(tab)

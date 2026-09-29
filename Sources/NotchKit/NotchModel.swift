@@ -94,16 +94,54 @@ public enum Transient: Equatable {
     }
 }
 
+/// 구독 한도 (Claude Code 상태 줄 입력에서 받음). 퍼센트는 0...100
+public struct PlanLimits: Equatable {
+    public var fiveHour: Double?
+    public var fiveHourResets: Date?
+    public var week: Double?
+    public var weekResets: Date?
+    public var updated: Date
+    public init(fiveHour: Double?, fiveHourResets: Date?, week: Double?, weekResets: Date?, updated: Date = Date()) {
+        self.fiveHour = fiveHour; self.fiveHourResets = fiveHourResets
+        self.week = week; self.weekResets = weekResets; self.updated = updated
+    }
+}
+
+/// 사용량 요약 (API 가격으로 환산한 추정치)
+public struct UsageSnapshot: Equatable {
+    public var todayCost: Double
+    public var todayTokens: Double
+    public var fiveHourCost: Double
+    public var weekCost: Double
+    public var hourly: [Double]
+    public var byModel: [(String, Double)]
+    public var codexTodayTokens: Double
+    public var updated: Date
+    public var limits: PlanLimits?
+
+    public init(todayCost: Double, todayTokens: Double, fiveHourCost: Double, weekCost: Double, hourly: [Double],
+                byModel: [(String, Double)], codexTodayTokens: Double, updated: Date, limits: PlanLimits? = nil) {
+        self.todayCost = todayCost; self.todayTokens = todayTokens; self.fiveHourCost = fiveHourCost
+        self.weekCost = weekCost; self.hourly = hourly; self.byModel = byModel
+        self.codexTodayTokens = codexTodayTokens; self.updated = updated; self.limits = limits
+    }
+
+    public static func == (a: UsageSnapshot, b: UsageSnapshot) -> Bool {
+        a.updated == b.updated && a.limits == b.limits && a.todayCost == b.todayCost
+    }
+}
+
 public enum CallState: Equatable {
     case ringing(name: String, subtitle: String)
     case active(name: String, since: Date)
 }
 
 public enum NotchTab: String, CaseIterable {
-    case claude, camera, music
+    case claude, usage, camera, music
     var symbol: String {
         switch self {
         case .claude: "sparkle"
+        case .usage: "chart.bar.fill"
         case .camera: "camera.fill"
         case .music: "music.note"
         }
@@ -111,6 +149,7 @@ public enum NotchTab: String, CaseIterable {
     var title: String {
         switch self {
         case .claude: "에이전트"
+        case .usage: "사용량"
         case .camera: "미러"
         case .music: "음악"
         }
@@ -154,6 +193,8 @@ public final class NotchModel: ObservableObject {
     @Published public var call: CallState?
     @Published public var sessions: [ClaudeSession] = []
     @Published public var tab: NotchTab = .claude
+    @Published public var usage: UsageSnapshot?
+    @Published public var limits: PlanLimits?
     @Published public private(set) var transient: Transient?
     @Published public private(set) var expanded = false
     @Published public private(set) var peeking = false
@@ -186,7 +227,7 @@ public final class NotchModel: ObservableObject {
     }
 
     public var availableTabs: [NotchTab] {
-        media != nil ? [.claude, .music, .camera] : [.claude, .camera]
+        media != nil ? [.claude, .usage, .music, .camera] : [.claude, .usage, .camera]
     }
 
     public var content: NotchContent {
@@ -239,6 +280,8 @@ public final class NotchModel: ObservableObject {
                 return Layout(size: CGSize(width: wide, height: n.height + 36 + rows * 34), topRadius: 12, bottomRadius: 30)
             case .camera:
                 return Layout(size: CGSize(width: wide, height: n.height + 206), topRadius: 12, bottomRadius: 32)
+            case .usage:
+                return Layout(size: CGSize(width: wide, height: n.height + 132), topRadius: 12, bottomRadius: 30)
             case .music:
                 return Layout(size: CGSize(width: wide, height: n.height + 142), topRadius: 12, bottomRadius: 32)
             }

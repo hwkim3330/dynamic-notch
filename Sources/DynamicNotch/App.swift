@@ -8,6 +8,7 @@ struct Main {
     static func main() {
         // Claude Code 훅에서 불릴 때: 이벤트만 넘기고 바로 종료 (UI 없음)
         if CommandLine.arguments.contains("--claude-hook") { ClaudeHook.run() }
+        if CommandLine.arguments.contains("--statusline") { ClaudeHook.statusLine() }
 
         let app = NSApplication.shared
         let delegate = AppDelegate()
@@ -39,7 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         providers = [nowPlaying, ClaudeProvider(model: model), CodexProvider(model: model),
                      BatteryProvider(model: model), ScreenLockProvider(model: model),
-                     SensorProvider(model: model), DownloadsProvider(model: model), RemoteProvider(model: model)]
+                     SensorProvider(model: model), DownloadsProvider(model: model), RemoteProvider(model: model),
+                     UsageProvider(model: model)]
 
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
@@ -47,6 +49,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         setupStatusItem()
 
+        if let i = CommandLine.arguments.firstIndex(of: "--open"), i + 1 < CommandLine.arguments.count,
+           let tab = NotchTab(rawValue: CommandLine.arguments[i + 1]) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [model] in model.open(tab) }
+        }
         if CommandLine.arguments.contains("--demo") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [model] in NotchDemo.run(model) }
         }
@@ -61,6 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let menu = NSMenu()
         menu.addItem(item("데모 재생", #selector(runDemo), "d"))
+        menu.addItem(item("사용량 보기", #selector(openUsage), "u"))
         menu.addItem(item("미러 열기", #selector(openMirror), ""))
         menu.addItem(.separator())
         let login = item("로그인 시 자동 실행", #selector(toggleLogin), "")
@@ -79,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func runDemo() { NotchDemo.run(model) }
     @objc func openMirror() { model.open(.camera) }
+    @objc func openUsage() { model.open(.usage) }
     @objc func quit() { NSApp.terminate(nil) }
 
     @objc func toggleLogin(_ sender: NSMenuItem) {
