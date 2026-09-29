@@ -38,7 +38,15 @@ struct CodexBot: View {
 
     var body: some View {
         TimelineView(.animation(minimumInterval: unit < 3 ? 1 / 10 : 1 / 24, paused: AnimationGate.paused)) { tl in
-            let t = tl.date.timeIntervalSinceReferenceDate
+            Still(mood: mood, unit: unit, t: tl.date.timeIntervalSinceReferenceDate)
+        }
+    }
+
+    struct Still: View {
+        let mood: ClawdMood
+        let unit: CGFloat
+        let t: Double
+        var body: some View {
             let u = unit
             let hop: Double = switch mood {
             case .working: -abs(sin(t * 2.4 * .pi)) * 0.6
@@ -66,8 +74,8 @@ struct CodexBot: View {
                 }
             }
             .offset(y: (hop + 1.2) * u)
+            .frame(width: unit * 15, height: unit * 13.5)
         }
-        .frame(width: unit * 15, height: unit * 13.5)
     }
 }
 
@@ -102,7 +110,7 @@ struct CompactClaudeView: View {
 
     var body: some View {
         Wings(inset: 8) {
-            AgentAvatar(agent: session.agent, mood: session.mood, unit: 2.2)
+            AgentSprite(agent: session.agent, mood: session.mood, unit: 2.2)
         } right: {
             HStack(spacing: 5) {
                 if session.state == .attention {

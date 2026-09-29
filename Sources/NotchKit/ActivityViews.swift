@@ -38,23 +38,35 @@ struct Waveform: View {
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1 / 15, paused: !active || AnimationGate.paused)) { tl in
-            let t = tl.date.timeIntervalSinceReferenceDate
+            Still(color: color, bars: bars, height: height, t: tl.date.timeIntervalSinceReferenceDate, active: active)
+        }
+    }
+
+    struct Still: View {
+        var color: Color
+        var bars = 5
+        var height: CGFloat
+        var t: Double
+        var active = true
+        var body: some View {
             HStack(alignment: .center, spacing: 2.2) {
                 ForEach(0..<bars, id: \.self) { i in
                     Capsule().fill(color)
-                        .frame(width: 3, height: barHeight(i, t))
+                        .frame(width: 3, height: Waveform.barHeight(i, t, active: active, height: height))
                 }
             }
             .frame(height: height)
         }
     }
 
-    private func barHeight(_ i: Int, _ t: Double) -> CGFloat {
+    static func barHeight(_ i: Int, _ t: Double, active: Bool, height: CGFloat) -> CGFloat {
         guard active else { return 3 }
+        // 10초 반복 스프라이트가 이어지도록 주파수를 0.1Hz 배수로 맞춘다
         let d = Double(i)
-        let a = sin(t * (6.1 + d * 1.73) + d * 1.3)
-        let b = sin(t * (2.9 + d * 0.87) + d * 2.4)
-        let c = sin(t * 11.3 + d * 0.7) * 0.25
+        let tau = 2 * Double.pi / 10
+        let a = sin(t * tau * (10 + d * 3) + d * 1.3)
+        let b = sin(t * tau * (5 + d) + d * 2.4)
+        let c = sin(t * tau * 18 + d * 0.7) * 0.25
         let v = min(1, abs(a * 0.7 + b * 0.5 + c))
         return 3 + (height - 3) * CGFloat(v)
     }
@@ -94,7 +106,11 @@ struct CompactMusicView: View {
         Wings {
             ArtworkView(image: media.artwork, tint: media.tint, side: n.height - 12, radius: 6)
         } right: {
-            Waveform(color: media.tint, active: media.isPlaying, height: n.height * 0.45)
+            if media.isPlaying {
+                WaveSprite(color: media.tint, height: n.height * 0.45)
+            } else {
+                Waveform(color: media.tint, active: false, height: n.height * 0.45)
+            }
         }
     }
 }
@@ -113,7 +129,7 @@ struct CompactCallView: View {
                 .fixedSize()
             }
         } right: {
-            Waveform(color: .green, active: true, bars: 6, height: 14)
+            WaveSprite(color: .green, height: 14)
         }
     }
 }

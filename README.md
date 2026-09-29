@@ -29,6 +29,19 @@
 - 노치 크기는 `NSScreen.auxiliaryTopLeftArea/RightArea`로 실측한다. 모양과 크기는 스프링으로 모핑되고, 노치 밖은 클릭이 그대로 통과한다.
 - Clawd는 [ClaudeAnimationBase](https://github.com/JohnHeibel/ClaudeAnimationBase)(MIT)의 `clawd.js` 실루엣과 포즈(idle, walk, hop, wave, sleep)를 SwiftUI Canvas로 옮겼다.
 
+## 성능
+
+노치에 몇 시간씩 떠 있는 작은 애니메이션(Clawd, 파형)은 프레임을 한 번 미리 그려 두고 Core Animation 키프레임으로 돌린다. 재생은 WindowServer가 하고 앱은 쉰다.
+
+| 상태 | CPU (M4 Max) |
+|---|---|
+| Claude 작업 중 표시 (Clawd가 계속 걸음) | 약 1.1% |
+| 변경 전 (SwiftUI로 매 프레임 그림) | 약 8~10% |
+
+화면이 꺼지거나 잠기면 애니메이션과 마우스 추적을 멈춘다. 전체 화면 앱(영상 등)에서는 계속 떠 있는 표시를 숨기고, 잠깐 뜨는 알림만 보여준다.
+
+시장 조사: [docs/research-2026-09.md](docs/research-2026-09.md)
+
 ## Claude Code 연결
 
 `~/.claude/settings.json`에 훅을 넣는다. 앱 실행 파일이 훅 모드로 이벤트를 받아서 실행 중인 앱에 분산 알림으로 넘긴다. 훅은 `async`라서 Claude Code를 느리게 만들지 않는다.

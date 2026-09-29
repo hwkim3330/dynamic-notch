@@ -27,6 +27,16 @@ public struct ClawdView: View {
     static let ochre = Color(red: 0.91, green: 0.667, blue: 0.22)    // #E8AA38
     static let cream = Color(red: 1, green: 0.961, blue: 0.886)      // #FFF5E2
 
+    /// 특정 시각 t 의 한 장면 (스프라이트 굽기용)
+    struct Still: View {
+        let view: ClawdView
+        let t: Double
+        var body: some View {
+            Canvas { ctx, size in view.draw(&ctx, size: size, t: t) }
+                .frame(width: view.unit * 15, height: view.unit * 13.5)
+        }
+    }
+
     public var body: some View {
         // 노치 날개에 들어가는 작은 크기는 12fps 로도 충분하다 (몇 시간씩 떠 있으니 전력 절약)
         TimelineView(.animation(minimumInterval: unit < 3 ? 1 / 10 : 1 / 24, paused: AnimationGate.paused)) { tl in
@@ -59,7 +69,7 @@ public struct ClawdView: View {
             let bp = t * 2.4, s1 = sin(bp * .pi)
             p.walk = bp / 2; p.dy = -abs(s1) * 0.6
             p.aL = 0.3 * s1 + 0.2; p.aR = -0.3 * s1 + 0.2
-            p.eyes = "look"; p.lookX = sin(t * 1.3) * 0.8
+            p.eyes = "look"; p.lookX = sin(t * 2 * .pi / 5) * 0.8
         case .done:
             let bp = t * 1.7, ab = abs(sin(bp * .pi)), hit = max(0, 1 - (bp - floor(bp)) * 3.5)
             p.dy = -ab * 3.2; p.sq = hit * 0.18; p.aL = 0.3 + ab * 1.1; p.aR = p.aL
@@ -69,7 +79,7 @@ public struct ClawdView: View {
             p.dy = -ab * 0.8; p.aL = 1.1 + 0.5 * sin(bp * .pi * 4); p.aR = -0.2
             p.eyes = "wide"; p.emote = "!"
         case .sleeping:
-            p.sq = 0.03 * sin(t * 1.6); p.eyes = "closed"; p.emote = "zzz"; p.aL = -0.3; p.aR = -0.3
+            p.sq = 0.03 * sin(t * 2 * .pi / 5); p.eyes = "closed"; p.emote = "zzz"; p.aL = -0.3; p.aR = -0.3
         }
         return p
     }
@@ -157,7 +167,7 @@ public struct ClawdView: View {
         // 감정 표시
         switch p.emote {
         case "!":
-            let wob = sin(t * 10) * 0.08
+            let wob = sin(t * 2 * .pi * 1.5) * 0.08
             var e = c
             e.translateBy(x: 0, y: -10.2 * u)
             e.rotate(by: .radians(0.1 + wob))
@@ -168,7 +178,7 @@ public struct ClawdView: View {
             e.fill(bang, with: .color(Self.ochre))
             e.fill(Path(ellipseIn: CGRect(x: -0.42 * u, y: 0.85 * u, width: 0.84 * u, height: 0.84 * u)), with: .color(Self.ochre))
         case "spark":
-            let tw = 1 + 0.2 * sin(t * 12)
+            let tw = 1 + 0.2 * sin(t * 2 * .pi * 2)
             star(&c, at: CGPoint(x: 6.2 * u, y: -9 * u), r: 1.3 * u * tw, color: Self.cream)
             star(&c, at: CGPoint(x: 8 * u, y: -7.2 * u), r: 0.7 * u / tw, color: Self.ochre)
         case "zzz":
