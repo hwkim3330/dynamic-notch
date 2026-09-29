@@ -38,7 +38,12 @@ public struct NowPlaying: Equatable {
     }
 }
 
-/// Claude Code 세션 하나 (훅 이벤트로 갱신)
+public enum AgentKind: String, Equatable {
+    case claude, codex
+    public var name: String { self == .claude ? "Claude Code" : "Codex" }
+}
+
+/// 코딩 에이전트 세션 하나 (Claude Code 훅 / Codex 세션 로그로 갱신)
 public struct ClaudeSession: Equatable, Identifiable {
     public enum State: Equatable { case working, attention, done }
     public var id: String
@@ -46,12 +51,16 @@ public struct ClaudeSession: Equatable, Identifiable {
     public var state: State
     public var since: Date
     public var detail: String
+    public var agent: AgentKind
     public var terminalBundleID: String?
+    /// 세션이 도는 터미널 탭의 tty (/dev/ttys003) — 여러 창 중 정확한 탭으로 이동할 때 씀
+    public var tty: String?
 
     public init(id: String, project: String, state: State, since: Date = Date(),
-                detail: String = "", terminalBundleID: String? = nil) {
+                detail: String = "", agent: AgentKind = .claude,
+                terminalBundleID: String? = nil, tty: String? = nil) {
         self.id = id; self.project = project; self.state = state; self.since = since
-        self.detail = detail; self.terminalBundleID = terminalBundleID
+        self.detail = detail; self.agent = agent; self.terminalBundleID = terminalBundleID; self.tty = tty
     }
 
     public var mood: ClawdMood {
@@ -67,8 +76,10 @@ public enum Transient: Equatable {
     case battery(level: Int, pluggedIn: Bool)
     case unlock(success: Bool)
     case faceID(success: Bool)
-    case claude(title: String, project: String, detail: String, mood: ClawdMood)
+    case claude(title: String, project: String, detail: String, mood: ClawdMood, agent: AgentKind = .claude)
     case sensor(camera: Bool, on: Bool)
+    case download(name: String, path: String)
+    case remote(on: Bool)
 
     var kind: String {
         switch self {
@@ -77,6 +88,8 @@ public enum Transient: Equatable {
         case .faceID: "faceid"
         case .claude: "claude"
         case .sensor: "sensor"
+        case .download: "download"
+        case .remote: "remote"
         }
     }
 }
@@ -97,7 +110,7 @@ public enum NotchTab: String, CaseIterable {
     }
     var title: String {
         switch self {
-        case .claude: "Claude Code"
+        case .claude: "에이전트"
         case .camera: "미러"
         case .music: "음악"
         }
@@ -144,6 +157,7 @@ public final class NotchModel: ObservableObject {
     @Published public private(set) var transient: Transient?
     @Published public private(set) var expanded = false
     @Published public private(set) var peeking = false
+    public var onRevealFile: ((String) -> Void)?
 
     public weak var controls: NotchControls?
     /// 펼쳐질 때 (햅틱, 재생 위치 새로고침 등)
@@ -208,12 +222,13 @@ public final class NotchModel: ObservableObject {
             return Layout(size: CGSize(width: n.width + 2 * 74, height: n.height), topRadius: 8, bottomRadius: 14)
         case .transient(let t):
             switch t {
-            case .battery, .sensor:
+            case .battery, .sensor, .remote:
                 return Layout(size: CGSize(width: n.width + 2 * 86, height: n.height), topRadius: 8, bottomRadius: 14)
             case .unlock, .faceID:
                 return Layout(size: CGSize(width: n.width + 24, height: n.height + 56), topRadius: 8, bottomRadius: 26)
-            case .claude:
+            case .claude, .download:
                 return Layout(size: CGSize(width: max(n.width + 200, 390), height: n.height + 60), topRadius: 10, bottomRadius: 28)
+
             }
         case .callRinging:
             return Layout(size: CGSize(width: max(n.width + 220, 420), height: n.height + 62), topRadius: 10, bottomRadius: 30)

@@ -21,10 +21,87 @@ enum ClaudeHook {
             "tool": str("tool_name"),
             "prompt": String(str("prompt").prefix(120)),
             "terminal": env["__CFBundleIdentifier"] ?? "",
+            "tty": controllingTTY() ?? "",
         ]
+        if env["DYNAMICNOTCH_DEBUG"] != nil { FileHandle.standardError.write("\(info)\n".data(using: .utf8)!) }
         DistributedNotificationCenter.default().postNotificationName(
             notification, object: nil, userInfo: info, deliverImmediately: true)
         exit(0)
+    }
+
+    /// 훅 프로세스는 stdin 이 파이프라 tty 가 없다. 부모(셸 → claude)를 거슬러 올라가 첫 tty 를 찾는다.
+    static func controllingTTY() -> String? {
+        var pid = getppid()
+        for _ in 0..<6 {
+            var info = kinfo_proc()
+            var size = MemoryLayout<kinfo_proc>.stride
+            var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+            guard sysctl(&mib, 4, &info, &size, nil, 0) == 0, size > 0 else { return nil }
+            let dev = info.kp_eproc.e_tdev
+            if dev != -1, let name = devname(dev, S_IFCHR) { return "/dev/" + String(cString: name) }
+            pid = info.kp_eproc.e_ppid
+            if pid <= 1 { return nil }
+        }
+        return nil
+    }
+}
+
+/// 세션이 도는 바로 그 터미널 탭으로 이동한다 (창이 여러 개여도)
+enum TerminalJump {
+    static func go(bundleID: String?, tty: String?) {
+        let id = bundleID ?? ""
+        if let tty, !tty.isEmpty {
+            let script: String? = switch id {
+            case "com.apple.Terminal":
+                """
+                tell application "Terminal"
+                  repeat with w in windows
+                    repeat with t in tabs of w
+                      if tty of t is "\(tty)" then
+                        set selected of t to true
+                        set index of w to 1
+                        activate
+                        return
+                      end if
+                    end repeat
+                  end repeat
+                end tell
+                """
+            case "com.googlecode.iterm2":
+                """
+                tell application "iTerm2"
+                  repeat with w in windows
+                    repeat with t in tabs of w
+                      repeat with s in sessions of t
+                        if tty of s is "\(tty)" then
+                          select w
+                          select t
+                          select s
+                          activate
+                          return
+                        end if
+                      end repeat
+                    end repeat
+                  end repeat
+                end tell
+                """
+            default: nil
+            }
+            if let script {
+                DispatchQueue.global().async {
+                    var err: NSDictionary?
+                    NSAppleScript(source: script)?.executeAndReturnError(&err)
+                    if let err { NSLog("DynamicNotch jump: \(err)") }
+                }
+                return
+            }
+        }
+        // 그 밖의 터미널(Ghostty, VS Code, Codex 앱 등)은 앱만 앞으로
+        if let app = NSRunningApplication.runningApplications(withBundleIdentifier: id).first {
+            app.activate()
+        } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+            NSWorkspace.shared.openApplication(at: url, configuration: .init())
+        }
     }
 }
 
@@ -42,11 +119,7 @@ final class ClaudeProvider {
             let info = note.userInfo as? [String: String] ?? [:]
             MainActor.assumeIsolated { self?.handle(info) }
         }
-        model.onOpenSession = { s in
-            guard let id = s.terminalBundleID, !id.isEmpty,
-                  let app = NSRunningApplication.runningApplications(withBundleIdentifier: id).first else { return }
-            app.activate()
-        }
+        model.onOpenSession = { s in TerminalJump.go(bundleID: s.terminalBundleID, tty: s.tty) }
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.prune() }
         }
@@ -65,6 +138,7 @@ final class ClaudeProvider {
         let existing = model.sessions.first { $0.id == id }
         var s = existing ?? ClaudeSession(id: id, project: project.isEmpty ? "Claude" : project, state: .done)
         if let t = i["terminal"], !t.isEmpty { s.terminalBundleID = t }
+        if let t = i["tty"], !t.isEmpty { s.tty = t }
         lastEvent[id] = Date()
 
         switch i["event"] {

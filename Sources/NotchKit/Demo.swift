@@ -84,6 +84,21 @@ public enum NotchDemo {
             m.sessions = []
             m.show(.claude(title: "작업 완료", project: "dynamic-notch", detail: "빌드 성공, 스크린샷 확인", mood: .done), for: 3)
             guard await wait(3.4) else { return }
+            // 1-2. Codex 도 같이: 여러 에이전트가 동시에
+            m.sessions = [ClaudeSession(id: "d1", project: "dynamic-notch", state: .working,
+                                        since: Date().addingTimeInterval(-42), detail: "파일 수정"),
+                          ClaudeSession(id: "d2", project: "wildspark-forest", state: .working,
+                                        since: Date().addingTimeInterval(-310), detail: "명령 실행", agent: .codex),
+                          ClaudeSession(id: "d3", project: "keti-calendar", state: .done, detail: "릴리스 1.3.1", agent: .claude)]
+            guard await wait(2.4) else { return }
+            m.open(.claude)
+            guard await wait(3.0) else { return }
+            m.collapse()
+            m.sessions = []
+            m.show(.claude(title: "작업 완료", project: "wildspark-forest", detail: "v10 배포 완료", mood: .done, agent: .codex), for: 2.8)
+            guard await wait(3.2) else { return }
+            m.show(.download(name: "DynamicNotch-demo.mp4", path: ""), for: 2.4)
+            guard await wait(2.8) else { return }
             // 2. 음악 재생 컴팩트 → 펼침
             let art = artwork()
             m.demoNowPlaying = NowPlaying(title: "Dolgoch Tape", artist: "Dynamic Notch",

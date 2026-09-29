@@ -147,3 +147,104 @@ final class SensorProvider {
         return false
     }
 }
+
+// MARK: - 다운로드 완료
+
+/// ~/Downloads 에 새 파일이 다 받아지면 알린다 (Chrome, Safari 등 브라우저 무관)
+@MainActor
+final class DownloadsProvider {
+    private let model: NotchModel
+    private let dir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads")
+    private var known: Set<String> = []
+    private var source: DispatchSourceFileSystemObject?
+    private var pending: [String: (size: UInt64, seen: Int)] = [:]
+    private var timer: Timer?
+
+    static let partial = ["crdownload", "download", "part", "partial", "tmp"]
+
+    init(model: NotchModel) {
+        self.model = model
+        known = Set(list())
+        model.onRevealFile = { path in
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        }
+        let fd = open(dir.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: .write, queue: .main)
+        src.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.changed() } }
+        src.setCancelHandler { close(fd) }
+        src.resume()
+        source = src
+        // 크기가 두 번 연속 같으면 다 받은 것으로 본다
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.settle() }
+        }
+    }
+
+    private func list() -> [String] {
+        (try? FileManager.default.contentsOfDirectory(atPath: dir.path))?.filter { !$0.hasPrefix(".") } ?? []
+    }
+
+    private func changed() {
+        let now = Set(list())
+        for name in now.subtracting(known) where !Self.partial.contains((name as NSString).pathExtension.lowercased()) {
+            pending[name] = (0, 0)
+        }
+        known = now
+    }
+
+    private func settle() {
+        for (name, st) in pending {
+            let path = dir.appendingPathComponent(name).path
+            guard let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?.uint64Value else {
+                pending[name] = nil; continue
+            }
+            if size == st.size, size > 0 {
+                if st.seen >= 1 {
+                    pending[name] = nil
+                    model.show(.download(name: name, path: path), for: 3.2)
+                } else { pending[name] = (size, st.seen + 1) }
+            } else { pending[name] = (size, 0) }
+        }
+    }
+}
+
+// MARK: - RustDesk 원격 접속
+
+/// 누군가 이 맥에 RustDesk 로 접속하면 연결 관리자(`--cm`) 창이 뜬다. 그걸 보고 알린다.
+@MainActor
+final class RemoteProvider {
+    private let model: NotchModel
+    private var timer: Timer?
+    private var last: Bool?
+
+    init(model: NotchModel) {
+        self.model = model
+        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.poll() }
+        }
+        poll()
+    }
+
+    private func poll() {
+        let pids = NSWorkspace.shared.runningApplications
+            .filter { ($0.bundleIdentifier ?? "").lowercased().contains("rustdesk") }
+            .map(\.processIdentifier)
+        let on = pids.contains { Self.args(of: $0).contains("--cm") }
+        if let last, last != on { model.show(.remote(on: on), for: on ? 3 : 2) }
+        last = on
+    }
+
+    /// RustDesk 프로세스의 실행 인자 (sysctl KERN_PROCARGS2, 같은 사용자 프로세스만 읽힘)
+    static func args(of pid: pid_t) -> [String] {
+        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+        var size = 0
+        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 4 else { return [] }
+        var buf = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, 3, &buf, &size, nil, 0) == 0 else { return [] }
+        let argc = buf.withUnsafeBytes { $0.load(as: Int32.self) }
+        var parts = buf[4..<size].split(separator: 0, omittingEmptySubsequences: true).map { String(decoding: $0, as: UTF8.self) }
+        if !parts.isEmpty { parts.removeFirst() }   // 실행 파일 경로
+        return Array(parts.prefix(Int(argc)))
+    }
+}

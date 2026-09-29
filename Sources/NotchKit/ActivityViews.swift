@@ -225,8 +225,38 @@ struct TransientView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.top, n.height + 2)
-        case .claude(let title, let project, let detail, let mood):
-            ClaudeBanner(title: title, project: project, detail: detail, mood: mood)
+        case .claude(let title, let project, let detail, let mood, let agent):
+            ClaudeBanner(title: title, project: project, detail: detail, mood: mood, agent: agent)
+        case .download(let name, _):
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(.white, Color.accentColor)
+                    .symbolEffect(.bounce, value: name)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("다운로드 완료").font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                    Text(name).font(.system(size: 12)).foregroundStyle(.white.opacity(0.55))
+                        .lineLimit(1).truncationMode(.middle)
+                }
+                Spacer(minLength: 0)
+                Text("Finder에서 보기").font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.4))
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, n.height + 4)
+        case .remote(let on):
+            Wings {
+                Image(systemName: on ? "display.and.arrow.down" : "display")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(on ? .red : .white.opacity(0.6))
+            } right: {
+                HStack(spacing: 6) {
+                    Text(on ? "원격 접속" : "원격 종료").font(.system(size: 13, weight: .semibold))
+                    Circle().fill(on ? Color.red : .white.opacity(0.3)).frame(width: 7, height: 7)
+                }
+                .foregroundStyle(on ? .red : .white.opacity(0.6))
+                .fixedSize()
+            }
+
         }
     }
 }

@@ -21,6 +21,56 @@ struct ClawdGlyph: View {
 
 func elapsedLabel(since: Date, now: Date) -> String { formatTime(now.timeIntervalSince(since)) }
 
+/// 에이전트 얼굴: Claude는 Clawd, Codex는 터미널 로봇
+struct AgentAvatar: View {
+    let agent: AgentKind
+    let mood: ClawdMood
+    let unit: CGFloat
+    var body: some View {
+        if agent == .claude { ClawdView(mood: mood, unit: unit) } else { CodexBot(mood: mood, unit: unit) }
+    }
+}
+
+/// Codex용 캐릭터: 둥근 화면에 `>_` 얼굴. 브랜드 로고가 아니라 단순한 터미널 모양.
+struct CodexBot: View {
+    let mood: ClawdMood
+    let unit: CGFloat
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30)) { tl in
+            let t = tl.date.timeIntervalSinceReferenceDate
+            let u = unit
+            let hop: Double = switch mood {
+            case .working: -abs(sin(t * 2.4 * .pi)) * 0.6
+            case .done: -abs(sin(t * 1.7 * .pi)) * 3
+            case .attention: -abs(sin(t * 1.6 * .pi)) * 0.8
+            default: -abs(sin(t * 0.9 * .pi)) * 0.3
+            }
+            let cursorOn = (t * 2).truncatingRemainder(dividingBy: 1) < 0.55
+            ZStack {
+                RoundedRectangle(cornerRadius: 2.2 * u, style: .continuous)
+                    .fill(Color.white)
+                    .frame(width: 10 * u, height: 7.4 * u)
+                HStack(spacing: 0.4 * u) {
+                    Text(mood == .done ? "^^" : ">")
+                        .font(.system(size: 4 * u, weight: .heavy, design: .monospaced))
+                    Rectangle().frame(width: 2 * u, height: 0.7 * u)
+                        .opacity(mood == .done || cursorOn ? 1 : 0)
+                        .offset(y: 1.2 * u)
+                }
+                .foregroundStyle(.black)
+                if mood == .attention {
+                    Text("!").font(.system(size: 4.5 * u, weight: .black, design: .rounded))
+                        .foregroundStyle(ClawdView.ochre)
+                        .offset(x: 6.5 * u, y: -4.4 * u)
+                }
+            }
+            .offset(y: (hop + 1.2) * u)
+        }
+        .frame(width: unit * 15, height: unit * 13.5)
+    }
+}
+
 /// 아무 활동이 없을 때 호버: Clawd가 왼쪽에서 빼꼼, 오른쪽엔 미러 버튼
 struct PeekView: View {
     let mood: ClawdMood
@@ -52,7 +102,7 @@ struct CompactClaudeView: View {
 
     var body: some View {
         Wings(inset: 8) {
-            ClawdView(mood: session.mood, unit: 2.2)
+            AgentAvatar(agent: session.agent, mood: session.mood, unit: 2.2)
         } right: {
             HStack(spacing: 5) {
                 if session.state == .attention {
@@ -62,7 +112,7 @@ struct CompactClaudeView: View {
                     TimelineView(.periodic(from: session.since, by: 1)) { tl in
                         Text(elapsedLabel(since: session.since, now: tl.date))
                             .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                            .foregroundStyle(ClawdView.clay)
+                            .foregroundStyle(session.agent == .claude ? ClawdView.clay : .white)
                     }
                 }
                 if others > 0 {
@@ -85,14 +135,16 @@ struct ClaudeBanner: View {
     let project: String
     let detail: String
     let mood: ClawdMood
+    let agent: AgentKind
 
     var body: some View {
         HStack(spacing: 12) {
-            ClawdView(mood: mood, unit: 3.4)
+            AgentAvatar(agent: agent, mood: mood, unit: 3.4)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
-                    Text(project).font(.system(size: 12, weight: .medium)).foregroundStyle(ClawdView.clay)
+                    Text(project).font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(agent == .claude ? ClawdView.clay : .white.opacity(0.7))
                 }
                 if !detail.isEmpty {
                     Text(detail).font(.system(size: 12)).foregroundStyle(.white.opacity(0.55))
@@ -121,7 +173,7 @@ struct ClaudePanel: View {
                 if sessions.isEmpty {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("실행 중인 Claude Code 없음").font(.system(size: 13, weight: .semibold))
+                            Text("실행 중인 Claude Code · Codex 없음").font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(.white.opacity(0.8))
                             Text("세션이 시작되면 여기서 상태를 보여줘요")
                                 .font(.system(size: 11)).foregroundStyle(.white.opacity(0.45))
@@ -165,7 +217,12 @@ private struct SessionRow: View {
             HStack(spacing: 8) {
                 Circle().fill(color).frame(width: 7, height: 7)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(session.project).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                    HStack(spacing: 5) {
+                        Text(session.project).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                        Text(session.agent == .claude ? "Claude" : "Codex")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(session.agent == .claude ? ClawdView.clay : .white.opacity(0.6))
+                    }
                     if !session.detail.isEmpty {
                         Text(session.detail).font(.system(size: 10)).foregroundStyle(.white.opacity(0.45))
                     }

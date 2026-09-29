@@ -36,6 +36,7 @@ public struct NotchView: View {
         switch c {
         case .idle, .peek, .musicCompact, .claudeCompact, .callCompact: model.open(nil)
         case .transient(.claude): model.dismissTransient(); model.open(.claude)
+        case .transient(.download(_, let path)): model.dismissTransient(); model.onRevealFile?(path)
         default: break
         }
     }
@@ -45,12 +46,15 @@ public struct NotchView: View {
         switch c {
         case .musicCompact: model.media?.tint ?? .clear
         case .expanded(.music): model.media?.tint ?? .clear
-        case .claudeCompact: model.headlineSession?.state == .attention ? ClawdView.ochre : ClawdView.clay
-        case .transient(.claude): ClawdView.clay
+        case .claudeCompact:
+            model.headlineSession?.state == .attention ? ClawdView.ochre
+                : (model.headlineSession?.agent == .codex ? .white : ClawdView.clay)
+        case .transient(.claude(_, _, _, _, let agent)): agent == .claude ? ClawdView.clay : .white
         case .callRinging, .callCompact: .green
         case .transient(.battery(_, let plugged)): plugged ? .green : .clear
         case .transient(.faceID(let ok)), .transient(.unlock(let ok)): ok ? .green : .white
         case .transient(.sensor(let camera, let on)): on ? (camera ? .green : .orange) : .clear
+        case .transient(.remote(let on)): on ? .red : .clear
         default: .clear
         }
     }

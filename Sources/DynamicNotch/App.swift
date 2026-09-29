@@ -37,8 +37,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
             nowPlaying?.refreshPosition()
         }
-        providers = [nowPlaying, ClaudeProvider(model: model), BatteryProvider(model: model),
-                     ScreenLockProvider(model: model), SensorProvider(model: model)]
+        providers = [nowPlaying, ClaudeProvider(model: model), CodexProvider(model: model),
+                     BatteryProvider(model: model), ScreenLockProvider(model: model),
+                     SensorProvider(model: model), DownloadsProvider(model: model), RemoteProvider(model: model)]
 
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
