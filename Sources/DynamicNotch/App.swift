@@ -6,6 +6,9 @@ import NotchKit
 @main
 struct Main {
     static func main() {
+        // Claude Code 훅에서 불릴 때: 이벤트만 넘기고 바로 종료 (UI 없음)
+        if CommandLine.arguments.contains("--claude-hook") { ClaudeHook.run() }
+
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate
@@ -29,12 +32,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let nowPlaying = NowPlayingProvider(model: model)
         model.controls = nowPlaying
+        model.cameraView = { AnyView(CameraMirror()) }
         model.onExpand = { [weak nowPlaying] in
             NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
             nowPlaying?.refreshPosition()
         }
-        providers = [nowPlaying, BatteryProvider(model: model), VolumeProvider(model: model),
-                     ScreenLockProvider(model: model), BluetoothProvider(model: model)]
+        providers = [nowPlaying, ClaudeProvider(model: model), BatteryProvider(model: model),
+                     ScreenLockProvider(model: model), SensorProvider(model: model)]
 
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
@@ -56,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let menu = NSMenu()
         menu.addItem(item("데모 재생", #selector(runDemo), "d"))
-        menu.addItem(item("Face ID 애니메이션", #selector(runFaceID), ""))
+        menu.addItem(item("미러 열기", #selector(openMirror), ""))
         menu.addItem(.separator())
         let login = item("로그인 시 자동 실행", #selector(toggleLogin), "")
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
@@ -73,7 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func runDemo() { NotchDemo.run(model) }
-    @objc func runFaceID() { model.playFaceID() }
+    @objc func openMirror() { model.open(.camera) }
     @objc func quit() { NSApp.terminate(nil) }
 
     @objc func toggleLogin(_ sender: NSMenuItem) {

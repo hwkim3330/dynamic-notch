@@ -172,30 +172,36 @@ struct TransientView: View {
 
     var body: some View {
         switch transient {
-        case .volume(let level, let muted):
+        case .battery(let level, let plugged):
             Wings {
-                Image(systemName: volumeSymbol(level, muted))
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .contentTransition(.symbolEffect(.replace))
-            } right: {
-                Bar(value: muted ? 0 : level, color: .white).frame(width: 64)
-            }
-        case .battery(let level, let charging, let plugged):
-            Wings {
-                Text(plugged ? (charging ? "충전 중" : "전원 연결됨") : "배터리 사용")
+                Text(plugged ? "충전 중" : "배터리 사용")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(plugged ? .green : .white)
+                    .foregroundStyle(plugged ? .green : (level <= 20 ? .red : .white))
                     .lineLimit(1).fixedSize()
             } right: {
                 HStack(spacing: 5) {
                     Text("\(level)%").font(.system(size: 13, weight: .semibold).monospacedDigit())
-                    Image(systemName: batterySymbol(level, charging))
+                    Image(systemName: batterySymbol(level, plugged))
                         .font(.system(size: 17))
                         .symbolRenderingMode(.palette)
                         .foregroundStyle(level <= 20 && !plugged ? .red : .green, .white.opacity(0.5))
                 }
                 .foregroundStyle(plugged ? .green : .white)
+                .fixedSize()
+            }
+        case .sensor(let camera, let on):
+            let color: Color = camera ? .green : .orange
+            Wings {
+                Image(systemName: camera ? (on ? "video.fill" : "video.slash.fill") : (on ? "mic.fill" : "mic.slash.fill"))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(on ? color : .white.opacity(0.6))
+                    .contentTransition(.symbolEffect(.replace))
+            } right: {
+                HStack(spacing: 6) {
+                    Text(camera ? "카메라" : "마이크").font(.system(size: 13, weight: .semibold))
+                    Circle().fill(on ? color : .white.opacity(0.3)).frame(width: 7, height: 7)
+                }
+                .foregroundStyle(on ? color : .white.opacity(0.6))
                 .fixedSize()
             }
         case .unlock(let ok):
@@ -219,27 +225,9 @@ struct TransientView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.top, n.height + 2)
-        case .device(let name, let symbol, let connected):
-            HStack(spacing: 12) {
-                Image(systemName: symbol)
-                    .font(.system(size: 26))
-                    .foregroundStyle(.white)
-                    .frame(width: 36)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(name).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-                    Text(connected ? "연결됨" : "연결 해제됨").font(.system(size: 12))
-                        .foregroundStyle(connected ? .green : .white.opacity(0.5))
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, n.height + 4)
+        case .claude(let title, let project, let detail, let mood):
+            ClaudeBanner(title: title, project: project, detail: detail, mood: mood)
         }
-    }
-
-    private func volumeSymbol(_ v: Double, _ muted: Bool) -> String {
-        if muted || v <= 0.001 { return "speaker.slash.fill" }
-        return v < 0.33 ? "speaker.wave.1.fill" : v < 0.66 ? "speaker.wave.2.fill" : "speaker.wave.3.fill"
     }
 }
 
@@ -326,60 +314,5 @@ struct ControlButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hover = $0 }
-    }
-}
-
-struct ExpandedHomeView: View {
-    @Environment(\.notchSize) var n
-    let battery: BatteryInfo?
-    let volume: Double
-    let call: CallState?
-    let endCall: () -> Void
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            TimelineView(.periodic(from: .now, by: 1)) { tl in
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(tl.date, format: .dateTime.month(.wide).day().weekday(.wide))
-                        .font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.55))
-                    Text(tl.date, format: .dateTime.hour().minute())
-                        .font(.system(size: 30, weight: .semibold).monospacedDigit()).foregroundStyle(.white)
-                }
-            }
-            Spacer()
-            if case .active(let name, _) = call {
-                VStack(spacing: 3) {
-                    CircleButton(symbol: "phone.down.fill", color: .red, size: 34, action: endCall)
-                    Text(name).font(.system(size: 10)).foregroundStyle(.white.opacity(0.6))
-                }
-            }
-            Ring(value: volume, color: .white, symbol: "speaker.wave.2.fill", label: "\(Int(volume * 100))%")
-            if let b = battery {
-                Ring(value: Double(b.level) / 100, color: b.pluggedIn ? .green : (b.level <= 20 ? .red : .white),
-                     symbol: b.charging ? "bolt.fill" : "battery.100percent", label: "\(b.level)%")
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, n.height + 2)
-    }
-}
-
-struct Ring: View {
-    let value: Double
-    let color: Color
-    let symbol: String
-    let label: String
-    var body: some View {
-        VStack(spacing: 3) {
-            ZStack {
-                Circle().stroke(Color.white.opacity(0.15), lineWidth: 4)
-                Circle().trim(from: 0, to: max(0.001, min(1, value)))
-                    .stroke(color, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                Image(systemName: symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(color)
-            }
-            .frame(width: 34, height: 34)
-            Text(label).font(.system(size: 10, weight: .medium).monospacedDigit()).foregroundStyle(.white.opacity(0.6))
-        }
     }
 }

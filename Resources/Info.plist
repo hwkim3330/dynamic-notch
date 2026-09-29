@@ -14,6 +14,6 @@
 	<key>LSUIElement</key><true/>
 	<key>NSHighResolutionCapable</key><true/>
 	<key>NSAppleEventsUsageDescription</key><string>Music·Spotify의 곡 정보, 앨범아트를 가져오고 재생을 제어합니다.</string>
-	<key>NSBluetoothAlwaysUsageDescription</key><string>AirPods 등 블루투스 기기 연결을 노치에 표시합니다.</string>
+	<key>NSCameraUsageDescription</key><string>노치 미러(카메라 미리보기)를 보여줍니다. 미러를 연 동안에만 켜집니다.</string>
 </dict>
 </plist>

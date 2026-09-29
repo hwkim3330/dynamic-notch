@@ -65,40 +65,51 @@ public enum NotchDemo {
                 try? await Task.sleep(nanoseconds: UInt64(s * 1_000_000_000))
                 return !Task.isCancelled
             }
-            m.setExpanded(false)
+            let saved = m.sessions
+            m.collapse()
             m.dismissTransient()
-            // 1. 전화 수신 → 수락 → 통화 중 컴팩트
-            m.call = .ringing(name: "Michael", subtitle: "휴대전화")
-            guard await wait(2.6) else { return }
-            m.acceptCall()
+            // 1. Claude Code 작업 중 → 확인 필요 → 다시 작업 → 완료
+            m.sessions = [ClaudeSession(id: "demo", project: "dynamic-notch", state: .working,
+                                        since: Date().addingTimeInterval(-83), detail: "노치 레이아웃 정리")]
             guard await wait(3.0) else { return }
-            m.endCall()
-            guard await wait(0.6) else { return }
+            m.sessions[0].state = .attention
+            m.sessions[0].detail = "Bash 실행 권한이 필요해요"
+            m.show(.claude(title: "확인 필요", project: "dynamic-notch", detail: "Bash 실행 권한이 필요해요", mood: .attention), for: 2.6)
+            guard await wait(3.4) else { return }
+            m.sessions[0].state = .working
+            guard await wait(1.6) else { return }
+            m.open(.claude)
+            guard await wait(2.6) else { return }
+            m.collapse()
+            m.sessions = []
+            m.show(.claude(title: "작업 완료", project: "dynamic-notch", detail: "빌드 성공, 스크린샷 확인", mood: .done), for: 3)
+            guard await wait(3.4) else { return }
             // 2. 음악 재생 컴팩트 → 펼침
             let art = artwork()
             m.demoNowPlaying = NowPlaying(title: "Dolgoch Tape", artist: "Dynamic Notch",
                                           source: "Demo", isPlaying: true, duration: 214, elapsed: 61,
                                           elapsedAt: Date(), artwork: art, artworkKey: "demo",
                                           tint: art.map(ArtworkTint.color(of:)) ?? .pink)
-            guard await wait(2.8) else { return }
-            m.setExpanded(true)
-            guard await wait(3.2) else { return }
-            m.setExpanded(false)
-            guard await wait(1.6) else { return }
-            // 3. Face ID
+            guard await wait(2.6) else { return }
+            m.open(.music)
+            guard await wait(3.0) else { return }
+            m.collapse()
+            guard await wait(1.2) else { return }
+            m.demoNowPlaying = nil
+            // 3. 영상 속 장면: 전화, Face ID, 충전
+            m.call = .ringing(name: "Michael", subtitle: "휴대전화")
+            guard await wait(2.4) else { return }
+            m.acceptCall()
+            guard await wait(2.6) else { return }
+            m.endCall()
+            guard await wait(0.6) else { return }
             m.playFaceID()
             guard await wait(2.8) else { return }
-            // 4. 볼륨, 충전
-            for v in stride(from: 0.3, through: 0.8, by: 0.1) {
-                m.show(.volume(level: v, muted: false), for: 1.4)
-                guard await wait(0.12) else { return }
-            }
-            guard await wait(1.6) else { return }
-            m.show(.battery(level: m.battery?.level ?? 82, charging: true, pluggedIn: true), for: 2.2)
+            m.show(.sensor(camera: true, on: true), for: 2)
+            guard await wait(2.4) else { return }
+            m.show(.battery(level: 82, pluggedIn: true), for: 2.2)
             guard await wait(2.6) else { return }
-            m.show(.device(name: "AirPods Pro", symbol: "airpodspro", connected: true), for: 2.2)
-            guard await wait(2.6) else { return }
-            m.demoNowPlaying = nil
+            m.sessions = saved
         }
     }
 }

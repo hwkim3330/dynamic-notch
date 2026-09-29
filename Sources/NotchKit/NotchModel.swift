@@ -38,20 +38,45 @@ public struct NowPlaying: Equatable {
     }
 }
 
+/// Claude Code 세션 하나 (훅 이벤트로 갱신)
+public struct ClaudeSession: Equatable, Identifiable {
+    public enum State: Equatable { case working, attention, done }
+    public var id: String
+    public var project: String
+    public var state: State
+    public var since: Date
+    public var detail: String
+    public var terminalBundleID: String?
+
+    public init(id: String, project: String, state: State, since: Date = Date(),
+                detail: String = "", terminalBundleID: String? = nil) {
+        self.id = id; self.project = project; self.state = state; self.since = since
+        self.detail = detail; self.terminalBundleID = terminalBundleID
+    }
+
+    public var mood: ClawdMood {
+        switch state {
+        case .working: .working
+        case .attention: .attention
+        case .done: .idle
+        }
+    }
+}
+
 public enum Transient: Equatable {
-    case volume(level: Double, muted: Bool)
-    case battery(level: Int, charging: Bool, pluggedIn: Bool)
+    case battery(level: Int, pluggedIn: Bool)
     case unlock(success: Bool)
     case faceID(success: Bool)
-    case device(name: String, symbol: String, connected: Bool)
+    case claude(title: String, project: String, detail: String, mood: ClawdMood)
+    case sensor(camera: Bool, on: Bool)
 
     var kind: String {
         switch self {
-        case .volume: "volume"
         case .battery: "battery"
         case .unlock: "unlock"
         case .faceID: "faceid"
-        case .device: "device"
+        case .claude: "claude"
+        case .sensor: "sensor"
         }
     }
 }
@@ -61,29 +86,40 @@ public enum CallState: Equatable {
     case active(name: String, since: Date)
 }
 
-public struct BatteryInfo: Equatable {
-    public var level: Int
-    public var charging: Bool
-    public var pluggedIn: Bool
-    public init(level: Int, charging: Bool, pluggedIn: Bool) {
-        self.level = level; self.charging = charging; self.pluggedIn = pluggedIn
+public enum NotchTab: String, CaseIterable {
+    case claude, camera, music
+    var symbol: String {
+        switch self {
+        case .claude: "sparkle"
+        case .camera: "camera.fill"
+        case .music: "music.note"
+        }
+    }
+    var title: String {
+        switch self {
+        case .claude: "Claude Code"
+        case .camera: "미러"
+        case .music: "음악"
+        }
     }
 }
 
 /// 노치가 지금 무엇을 보여주는지. 우선순위는 `NotchModel.content` 참고.
 public enum NotchContent: Equatable {
     case idle
+    case peek
     case musicCompact
+    case claudeCompact
     case callCompact
     case callRinging
     case transient(Transient)
-    case expandedMusic
-    case expandedHome
+    case expanded(NotchTab)
 
     /// 뷰 전환(블러 페이드)의 기준. 값만 바뀌면 같은 뷰를 유지한다.
     var kind: String {
         switch self {
         case .transient(let t): "t." + t.kind
+        case .expanded: "expanded"
         default: "\(self)"
         }
     }
@@ -103,14 +139,19 @@ public final class NotchModel: ObservableObject {
     @Published public var nowPlaying: NowPlaying?
     @Published public var demoNowPlaying: NowPlaying?
     @Published public var call: CallState?
-    @Published public var battery: BatteryInfo?
-    @Published public var volume: Double = 0.5
+    @Published public var sessions: [ClaudeSession] = []
+    @Published public var tab: NotchTab = .claude
     @Published public private(set) var transient: Transient?
     @Published public private(set) var expanded = false
+    @Published public private(set) var peeking = false
 
     public weak var controls: NotchControls?
-    /// 호버로 펼쳐질 때 (햅틱, 재생 위치 새로고침 등)
+    /// 펼쳐질 때 (햅틱, 재생 위치 새로고침 등)
     public var onExpand: (() -> Void)?
+    /// 세션 행을 누르면 그 세션의 터미널로 이동
+    public var onOpenSession: ((ClaudeSession) -> Void)?
+    /// 카메라 미러 뷰 (플랫폼별로 주입; macOS는 AVCaptureVideoPreviewLayer)
+    public var cameraView: (() -> AnyView)?
 
     private var transientTask: Task<Void, Never>?
     private var hoverTask: Task<Void, Never>?
@@ -120,12 +161,28 @@ public final class NotchModel: ObservableObject {
 
     public var media: NowPlaying? { demoNowPlaying ?? nowPlaying }
 
+    /// 노치에 요약해서 보여줄 세션: 확인 필요 > 작업 중
+    public var headlineSession: ClaudeSession? {
+        sessions.first { $0.state == .attention } ?? sessions.first { $0.state == .working }
+    }
+
+    public var clawdMood: ClawdMood {
+        if let s = headlineSession { return s.mood }
+        return sessions.isEmpty ? .sleeping : .idle
+    }
+
+    public var availableTabs: [NotchTab] {
+        media != nil ? [.claude, .music, .camera] : [.claude, .camera]
+    }
+
     public var content: NotchContent {
         if case .ringing = call { return .callRinging }
         if let t = transient { return .transient(t) }
-        if expanded { return media != nil ? .expandedMusic : .expandedHome }
+        if expanded { return .expanded(availableTabs.contains(tab) ? tab : .claude) }
         if case .active = call { return .callCompact }
+        if headlineSession != nil { return .claudeCompact }
         if media?.isPlaying == true { return .musicCompact }
+        if peeking { return .peek }
         return .idle
     }
 
@@ -139,30 +196,37 @@ public final class NotchModel: ObservableObject {
 
     public func layout(for c: NotchContent) -> Layout {
         let n = notchSize
-        let side = n.height + 14
         let wide = max(n.width + 250, 470)
         switch c {
         case .idle:
             return Layout(size: n, topRadius: 6, bottomRadius: 11)
+        case .peek:
+            return Layout(size: CGSize(width: n.width + 2 * 44, height: n.height), topRadius: 8, bottomRadius: 14)
         case .musicCompact:
-            return Layout(size: CGSize(width: n.width + 2 * side, height: n.height), topRadius: 8, bottomRadius: 14)
-        case .callCompact:
+            return Layout(size: CGSize(width: n.width + 2 * (n.height + 14), height: n.height), topRadius: 8, bottomRadius: 14)
+        case .claudeCompact, .callCompact:
             return Layout(size: CGSize(width: n.width + 2 * 74, height: n.height), topRadius: 8, bottomRadius: 14)
         case .transient(let t):
             switch t {
-            case .volume, .battery:
+            case .battery, .sensor:
                 return Layout(size: CGSize(width: n.width + 2 * 86, height: n.height), topRadius: 8, bottomRadius: 14)
             case .unlock, .faceID:
                 return Layout(size: CGSize(width: n.width + 24, height: n.height + 56), topRadius: 8, bottomRadius: 26)
-            case .device:
-                return Layout(size: CGSize(width: max(n.width + 150, 330), height: n.height + 54), topRadius: 10, bottomRadius: 26)
+            case .claude:
+                return Layout(size: CGSize(width: max(n.width + 200, 390), height: n.height + 60), topRadius: 10, bottomRadius: 28)
             }
         case .callRinging:
             return Layout(size: CGSize(width: max(n.width + 220, 420), height: n.height + 62), topRadius: 10, bottomRadius: 30)
-        case .expandedMusic:
-            return Layout(size: CGSize(width: wide, height: n.height + 142), topRadius: 12, bottomRadius: 32)
-        case .expandedHome:
-            return Layout(size: CGSize(width: wide, height: n.height + 84), topRadius: 12, bottomRadius: 30)
+        case .expanded(let tab):
+            switch tab {
+            case .claude:
+                let rows = CGFloat(min(3, max(1, sessions.count)))
+                return Layout(size: CGSize(width: wide, height: n.height + 36 + rows * 34), topRadius: 12, bottomRadius: 30)
+            case .camera:
+                return Layout(size: CGSize(width: wide, height: n.height + 206), topRadius: 12, bottomRadius: 32)
+            case .music:
+                return Layout(size: CGSize(width: wide, height: n.height + 142), topRadius: 12, bottomRadius: 32)
+            }
         }
     }
 
@@ -209,22 +273,51 @@ public final class NotchModel: ObservableObject {
 
     public func endCall() { call = nil }
 
+    /// 호버: 활동 중이면 펼치고, 아무것도 없으면 살짝 삐져나오기만 한다 (클릭해야 펼침).
+    /// 화면 위쪽 가운데로 마우스를 옮길 때마다 큰 판이 튀어나와 가리지 않게 하기 위함.
     public func setHover(_ h: Bool) {
         guard h != hovering else { return }
         hovering = h
         hoverTask?.cancel()
         hoverTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: h ? 110_000_000 : 380_000_000)
-            guard let self, !Task.isCancelled, self.expanded != h else { return }
-            self.expanded = h
-            if h { self.onExpand?() }
+            try? await Task.sleep(nanoseconds: h ? 150_000_000 : 380_000_000)
+            guard let self, !Task.isCancelled else { return }
+            if h {
+                switch self.content {
+                case .musicCompact, .claudeCompact, .callCompact: self.open(nil)
+                case .idle: self.peeking = true
+                default: break
+                }
+            } else {
+                self.peeking = false
+                self.expanded = false
+            }
         }
     }
 
-    public func setExpanded(_ e: Bool) {
+    public func open(_ tab: NotchTab?) {
         hoverTask?.cancel()
-        guard expanded != e else { return }
-        expanded = e
-        if e { onExpand?() }
+        peeking = false
+        if let tab { self.tab = tab }
+        else if headlineSession != nil { self.tab = .claude }
+        else if media?.isPlaying == true { self.tab = .music }
+        else if self.tab == .camera || !availableTabs.contains(self.tab) { self.tab = .claude }
+        guard !expanded else { return }
+        expanded = true
+        onExpand?()
     }
+
+    public func collapse() {
+        hoverTask?.cancel()
+        expanded = false
+        peeking = false
+    }
+
+    // MARK: - Claude Code
+
+    public func upsert(_ s: ClaudeSession) {
+        if let i = sessions.firstIndex(where: { $0.id == s.id }) { sessions[i] = s } else { sessions.append(s) }
+    }
+
+    public func removeSession(_ id: String) { sessions.removeAll { $0.id == id } }
 }

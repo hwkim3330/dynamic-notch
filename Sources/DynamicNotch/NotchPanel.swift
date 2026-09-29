@@ -40,6 +40,10 @@ final class NotchPanel: NSPanel {
         timer = Timer.scheduledTimer(withTimeInterval: 1 / 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.trackMouse() }
         }
+        // 다른 곳을 클릭하면 접는다 (메뉴에서 연 미러 등)
+        NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            MainActor.assumeIsolated { self?.model.collapse() }
+        }
     }
 
     override var canBecomeKey: Bool { false }
@@ -71,7 +75,7 @@ final class NotchPanel: NSPanel {
         let cx = frame.midX
         var rect = CGRect(x: cx - l.width / 2, y: top - l.height, width: l.width, height: l.height)
         // 접힌 노치는 살짝 넓게 잡아 쉽게 호버되도록
-        if model.content == .idle || model.content == .musicCompact { rect = rect.insetBy(dx: -6, dy: -4) }
+        if model.content == .idle { rect = rect.insetBy(dx: -4, dy: -2) }
         let inside = rect.contains(NSEvent.mouseLocation)
         if ignoresMouseEvents == inside { ignoresMouseEvents = !inside }
         model.setHover(inside)

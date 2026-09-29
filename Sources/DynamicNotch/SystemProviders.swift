@@ -1,18 +1,16 @@
 import AppKit
 import CoreAudio
-import AudioToolbox
+import CoreMediaIO
 import IOKit.ps
-import IOBluetooth
-import CoreBluetooth
 import NotchKit
 
-// MARK: - 배터리 / 전원 어댑터
+// MARK: - 전원 어댑터 연결/분리, 배터리 부족
 
 @MainActor
 final class BatteryProvider {
     private let model: NotchModel
     private var source: CFRunLoopSource?
-    private var last: BatteryInfo?
+    private var last: (level: Int, plugged: Bool)?
 
     init(model: NotchModel) {
         self.model = model
@@ -26,7 +24,7 @@ final class BatteryProvider {
         update()
     }
 
-    private func read() -> BatteryInfo? {
+    private func read() -> (level: Int, plugged: Bool)? {
         guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
               let list = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef] else { return nil }
         for ps in list {
@@ -34,84 +32,20 @@ final class BatteryProvider {
                   (d[kIOPSTypeKey] as? String) == kIOPSInternalBatteryType else { continue }
             let cap = d[kIOPSCurrentCapacityKey] as? Int ?? 0
             let mx = max(1, d[kIOPSMaxCapacityKey] as? Int ?? 100)
-            return BatteryInfo(level: Int((Double(cap) / Double(mx) * 100).rounded()),
-                               charging: d[kIOPSIsChargingKey] as? Bool ?? false,
-                               pluggedIn: (d[kIOPSPowerSourceStateKey] as? String) == kIOPSACPowerValue)
+            return (Int((Double(cap) / Double(mx) * 100).rounded()),
+                    (d[kIOPSPowerSourceStateKey] as? String) == kIOPSACPowerValue)
         }
         return nil
     }
 
     func update() {
         guard let b = read() else { return }
-        model.battery = b
-        if let last, last.pluggedIn != b.pluggedIn {
-            model.show(.battery(level: b.level, charging: b.charging || b.pluggedIn, pluggedIn: b.pluggedIn), for: 2.4)
-        } else if let last, last.level > 20, b.level <= 20, !b.pluggedIn {
-            model.show(.battery(level: b.level, charging: false, pluggedIn: false), for: 3)
+        if let last, last.plugged != b.plugged {
+            model.show(.battery(level: b.level, pluggedIn: b.plugged), for: 2.4)
+        } else if let last, last.level > 20, b.level <= 20, !b.plugged {
+            model.show(.battery(level: b.level, pluggedIn: false), for: 3)
         }
         last = b
-    }
-}
-
-// MARK: - 볼륨
-
-@MainActor
-final class VolumeProvider {
-    private let model: NotchModel
-    private var device = AudioObjectID(kAudioObjectUnknown)
-    private var lastVolume: Float32 = -1
-    private var lastMute = false
-    private let started = Date()
-    private let listener: AudioObjectPropertyListenerBlock
-
-    private static var volumeAddr = AudioObjectPropertyAddress(
-        mSelector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
-        mScope: kAudioDevicePropertyScopeOutput, mElement: kAudioObjectPropertyElementMain)
-    private static var muteAddr = AudioObjectPropertyAddress(
-        mSelector: kAudioDevicePropertyMute,
-        mScope: kAudioDevicePropertyScopeOutput, mElement: kAudioObjectPropertyElementMain)
-    private static var defaultAddr = AudioObjectPropertyAddress(
-        mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-        mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
-
-    init(model: NotchModel) {
-        self.model = model
-        var weakSelf: VolumeProvider?
-        listener = { _, _ in MainActor.assumeIsolated { weakSelf?.read(show: true) } }
-        weakSelf = self
-        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &Self.defaultAddr, .main) { [weak self] _, _ in
-            MainActor.assumeIsolated { self?.attach() }
-        }
-        attach()
-    }
-
-    private func attach() {
-        if device != kAudioObjectUnknown {
-            AudioObjectRemovePropertyListenerBlock(device, &Self.volumeAddr, .main, listener)
-            AudioObjectRemovePropertyListenerBlock(device, &Self.muteAddr, .main, listener)
-        }
-        var id = AudioObjectID(kAudioObjectUnknown)
-        var size = UInt32(MemoryLayout<AudioObjectID>.size)
-        AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &Self.defaultAddr, 0, nil, &size, &id)
-        device = id
-        AudioObjectAddPropertyListenerBlock(device, &Self.volumeAddr, .main, listener)
-        AudioObjectAddPropertyListenerBlock(device, &Self.muteAddr, .main, listener)
-        read(show: false)
-    }
-
-    private func read(show: Bool) {
-        var v: Float32 = 0
-        var size = UInt32(MemoryLayout<Float32>.size)
-        AudioObjectGetPropertyData(device, &Self.volumeAddr, 0, nil, &size, &v)
-        var m: UInt32 = 0
-        size = UInt32(MemoryLayout<UInt32>.size)
-        let hasMute = AudioObjectGetPropertyData(device, &Self.muteAddr, 0, nil, &size, &m) == noErr
-        let muted = hasMute && m != 0
-        defer { lastVolume = v; lastMute = muted }
-        model.volume = Double(v)
-        guard show, Date().timeIntervalSince(started) > 1.5,
-              abs(v - lastVolume) > 0.001 || muted != lastMute else { return }
-        model.show(.volume(level: Double(v), muted: muted), for: 1.6)
     }
 }
 
@@ -131,64 +65,85 @@ final class ScreenLockProvider {
     }
 }
 
-// MARK: - 블루투스 기기 (AirPods 등)
+// MARK: - 카메라 / 마이크 사용 감지
 
-/// IOBluetooth 는 권한이 정해지지 않았으면 메인 스레드를 막고 기다리므로,
-/// CoreBluetooth 로 권한을 비동기로 받은 뒤에만 등록한다.
+/// 다른 앱이 카메라나 마이크를 켜고 끌 때 노치에 표시한다 (노치 = 카메라 자리).
+/// 권한이 필요 없는 CoreMediaIO / CoreAudio 의 "IsRunningSomewhere" 속성을 1초마다 읽는다.
 @MainActor
-final class BluetoothProvider: NSObject, CBCentralManagerDelegate {
+final class SensorProvider {
     private let model: NotchModel
-    private var started = Date()
-    private var connectNote: IOBluetoothUserNotification?
-    private var central: CBCentralManager?
+    private var timer: Timer?
+    private var camera: Bool?
+    private var mic: Bool?
 
     init(model: NotchModel) {
         self.model = model
-        super.init()
-        switch CBManager.authorization {
-        case .allowedAlways: register()
-        case .notDetermined: central = CBCentralManager(delegate: self, queue: .main)
-        default: break
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.poll() }
         }
+        poll()
     }
 
-    nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        MainActor.assumeIsolated {
-            if CBManager.authorization == .allowedAlways, connectNote == nil { register() }
+    private func poll() {
+        let cam = Self.cameraRunning()
+        let m = Self.micRunning()
+        // 우리 미러가 켠 카메라는 알리지 않는다
+        if let camera, cam != camera, !CameraMirror.isActive {
+            model.show(.sensor(camera: true, on: cam), for: 2.2)
+        } else if let mic, m != mic {
+            model.show(.sensor(camera: false, on: m), for: 2.2)
         }
+        camera = cam
+        mic = m
     }
 
-    private func register() {
-        started = Date()
-        connectNote = IOBluetoothDevice.register(forConnectNotifications: self, selector: #selector(connected(_:device:)))
-    }
-
-    private func symbol(for d: IOBluetoothDevice) -> String {
-        let name = (d.name ?? "").lowercased()
-        if name.contains("airpods max") { return "airpodsmax" }
-        if name.contains("airpods pro") { return "airpodspro" }
-        if name.contains("airpods") { return "airpods" }
-        if name.contains("beats") { return "beats.headphones" }
-        switch d.deviceClassMajor {
-        case UInt32(kBluetoothDeviceClassMajorAudio): return "headphones"
-        case UInt32(kBluetoothDeviceClassMajorPeripheral):
-            if name.contains("mouse") { return "magicmouse" }
-            if name.contains("trackpad") { return "rectangle.and.hand.point.up.left" }
-            return "keyboard"
-        case UInt32(kBluetoothDeviceClassMajorPhone): return "iphone"
-        default: return "dot.radiowaves.left.and.right"
+    static func cameraRunning() -> Bool {
+        var addr = CMIOObjectPropertyAddress(
+            mSelector: CMIOObjectPropertySelector(kCMIOHardwarePropertyDevices),
+            mScope: CMIOObjectPropertyScope(kCMIOObjectPropertyScopeGlobal),
+            mElement: CMIOObjectPropertyElement(kCMIOObjectPropertyElementMain))
+        var size: UInt32 = 0
+        guard CMIOObjectGetPropertyDataSize(CMIOObjectID(kCMIOObjectSystemObject), &addr, 0, nil, &size) == 0,
+              size > 0 else { return false }
+        var ids = [CMIOObjectID](repeating: 0, count: Int(size) / MemoryLayout<CMIOObjectID>.size)
+        var used: UInt32 = 0
+        CMIOObjectGetPropertyData(CMIOObjectID(kCMIOObjectSystemObject), &addr, 0, nil, size, &used, &ids)
+        for id in ids {
+            var a = CMIOObjectPropertyAddress(
+                mSelector: CMIOObjectPropertySelector(kCMIODevicePropertyDeviceIsRunningSomewhere),
+                mScope: CMIOObjectPropertyScope(kCMIOObjectPropertyScopeWildcard),
+                mElement: CMIOObjectPropertyElement(kCMIOObjectPropertyElementWildcard))
+            var running: UInt32 = 0
+            var got: UInt32 = 0
+            if CMIOObjectGetPropertyData(id, &a, 0, nil, UInt32(MemoryLayout<UInt32>.size), &got, &running) == 0,
+               running != 0 { return true }
         }
+        return false
     }
 
-    @objc private func connected(_ note: IOBluetoothUserNotification, device: IOBluetoothDevice) {
-        device.register(forDisconnectNotification: self, selector: #selector(disconnected(_:device:)))
-        // 시작 직후엔 이미 연결된 기기들이 한꺼번에 들어오므로 무시
-        guard Date().timeIntervalSince(started) > 3 else { return }
-        model.show(.device(name: device.name ?? "블루투스 기기", symbol: symbol(for: device), connected: true), for: 2.6)
-    }
-
-    @objc private func disconnected(_ note: IOBluetoothUserNotification, device: IOBluetoothDevice) {
-        note.unregister()
-        model.show(.device(name: device.name ?? "블루투스 기기", symbol: symbol(for: device), connected: false), for: 2.2)
+    static func micRunning() -> Bool {
+        var addr = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDevices,
+                                              mScope: kAudioObjectPropertyScopeGlobal,
+                                              mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size) == noErr
+        else { return false }
+        var ids = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &ids)
+        for id in ids {
+            // 입력 스트림이 있는 장치만
+            var sAddr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreams,
+                                                   mScope: kAudioDevicePropertyScopeInput,
+                                                   mElement: kAudioObjectPropertyElementMain)
+            var sSize: UInt32 = 0
+            guard AudioObjectGetPropertyDataSize(id, &sAddr, 0, nil, &sSize) == noErr, sSize > 0 else { continue }
+            var rAddr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
+                                                   mScope: kAudioObjectPropertyScopeGlobal,
+                                                   mElement: kAudioObjectPropertyElementMain)
+            var running: UInt32 = 0
+            var rSize = UInt32(MemoryLayout<UInt32>.size)
+            if AudioObjectGetPropertyData(id, &rAddr, 0, nil, &rSize, &running) == noErr, running != 0 { return true }
+        }
+        return false
     }
 }
