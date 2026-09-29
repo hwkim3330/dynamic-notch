@@ -193,6 +193,7 @@ final class ClaudeProvider {
             let wasBusy = existing?.state == .working || existing?.state == .attention
             s.state = .done
             s.since = Date()
+            s.kids = 0
             // 터미널을 보고 있을 땐 짧은 답마다 띄우지 않는다
             let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
             if wasBusy, took > 45 || front != s.terminalBundleID {
@@ -201,6 +202,11 @@ final class ClaudeProvider {
                                    detail: m > 0 ? "\(m)분 \(sec)초 걸림" : "\(sec)초 걸림", mood: .done), for: 3)
             }
             s.detail = ""
+        case "SubagentStart":
+            s.kids += 1
+            if s.state != .attention { s.state = .working }
+        case "SubagentStop":
+            s.kids = max(0, s.kids - 1)
         case "SessionEnd":
             model.removeSession(id)
             lastEvent[id] = nil

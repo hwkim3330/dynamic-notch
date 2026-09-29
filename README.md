@@ -12,6 +12,7 @@
 | 활동 | 동작 |
 |---|---|
 | ✳️ **Claude Code** | 작업 중이면 노치 왼쪽에서 Clawd가 걷고, 오른쪽에 경과 시간이 나온다. 권한이 필요하면 "확인 필요" 배너(Clawd가 손 흔들며 `!`), 끝나면 "작업 완료" 배너(깡총)를 띄운다. 펼치면 세션 목록이 보이고, 행을 누르면 그 세션의 터미널로 이동한다 |
+| 🐣 **새끼 Clawd** | Claude가 서브에이전트를 부르면 새끼 Clawd가 태어나 큰 Clawd 뒤를 따라 걷는다. 서브에이전트가 끝나면 하나씩 사라진다 (`SubagentStart`/`SubagentStop` 훅) |
 | `>_` **Codex** | Codex 데스크톱 앱과 CLI 모두 지원. `~/.codex/sessions` 로그를 읽기만 해서 Codex 설정은 건드리지 않는다. 작업 중이면 노치에 표시하고, 승인이 필요하거나 끝나면 알린다 |
 | 🪟 **여러 창** | 세션마다 터미널 tty를 기억한다. 펼친 목록에서 누르면 Terminal/iTerm2의 바로 그 탭으로 이동한다 (그 밖의 터미널은 앱만 앞으로 가져온다) |
 | ⬇️ **다운로드** | Chrome, Safari 등 브라우저와 상관없이 `~/Downloads`에 파일 받기가 끝나면 알린다. 누르면 Finder에서 보여준다 |
@@ -52,7 +53,8 @@
     "UserPromptSubmit": [{ "hooks": [{ "type": "command", "async": true, "timeout": 5,
       "command": "H=\"$HOME/Applications/DynamicNotch.app/Contents/MacOS/DynamicNotch\"; [ -x \"$H\" ] && \"$H\" --claude-hook 2>/dev/null || true" }] }],
     "PreToolUse":  [{ "matcher": "*", "hooks": [ "…같은 명령…" ] }],
-    "Notification": [ "…" ], "Stop": [ "…" ], "SessionEnd": [ "…" ]
+    "Notification": [ "…" ], "Stop": [ "…" ], "SessionEnd": [ "…" ],
+    "SubagentStart": [ "…" ], "SubagentStop": [ "…" ]
   }
 }
 ```

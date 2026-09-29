@@ -77,12 +77,13 @@ struct AgentSprite: View {
     let agent: AgentKind
     let mood: ClawdMood
     let unit: CGFloat
+    var seed: Double = 0
 
     var body: some View {
-        let key = "\(agent.rawValue).\(mood).\(unit)"
+        let key = "\(agent.rawValue).\(mood).\(unit).\(seed)"
         let frames = SpriteCache.frames(key: key, scale: scale) { t in
             Group {
-                if agent == .claude { ClawdView.Still(view: ClawdView(mood: mood, unit: unit), t: t) }
+                if agent == .claude { ClawdView.Still(view: ClawdView(mood: mood, unit: unit, seed: seed), t: t) }
                 else { CodexBot.Still(mood: mood, unit: unit, t: t) }
             }
         }
@@ -102,5 +103,33 @@ struct WaveSprite: View {
             Waveform.Still(color: color, height: height, t: t)
         }
         SpritePlayer(frames: frames).frame(width: 5 * 3 + 4 * 2.2, height: height)
+    }
+}
+
+/// 큰 Clawd 뒤를 따라가는 새끼 Clawd 들 (서브에이전트 하나당 하나)
+struct ClawdFamily: View {
+    let agent: AgentKind
+    let mood: ClawdMood
+    let unit: CGFloat
+    let kids: Int
+    var maxKids = 2
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: -unit * 1.5) {
+            AgentSprite(agent: agent, mood: mood, unit: unit)
+            ForEach(0..<min(kids, maxKids), id: \.self) { i in
+                // 새끼는 걸음 박자를 조금씩 어긋나게 (seed = 반 박자 단위라 10초 반복과 맞음)
+                AgentSprite(agent: agent, mood: .working, unit: unit * 0.52, seed: Double(i + 1) * 0.35)
+                    .transition(.scale(scale: 0.2, anchor: .bottom).combined(with: .opacity))
+            }
+            if kids > maxKids {
+                Text("+\(kids - maxKids)").font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(ClawdView.clayLt)
+                    .fixedSize()
+                    .padding(.leading, unit * 2)
+                    .padding(.bottom, unit)
+            }
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.6), value: kids)
     }
 }

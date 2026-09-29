@@ -107,10 +107,11 @@ struct PeekView: View {
 struct CompactClaudeView: View {
     let session: ClaudeSession
     let others: Int
+    let kids: Int
 
     var body: some View {
         Wings(inset: 8) {
-            AgentSprite(agent: session.agent, mood: session.mood, unit: 2.2)
+            ClawdFamily(agent: session.agent, mood: session.mood, unit: 2.2, kids: kids)
         } right: {
             HStack(spacing: 5) {
                 if session.state == .attention {
@@ -174,9 +175,17 @@ struct ClaudePanel: View {
     let open: (ClaudeSession) -> Void
 
     var body: some View {
+        let kids = sessions.reduce(0) { $0 + $1.kids }
         HStack(alignment: .top, spacing: 14) {
-            ClawdView(mood: mood, unit: 3.6)
-                .padding(.top, 2)
+            HStack(alignment: .bottom, spacing: -6) {
+                ClawdView(mood: mood, unit: 3.6)
+                ForEach(0..<min(kids, 3), id: \.self) { i in
+                    AgentSprite(agent: .claude, mood: .working, unit: 1.9, seed: Double(i + 1) * 0.35)
+                        .transition(.scale(scale: 0.2, anchor: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.spring(response: 0.4, dampingFraction: 0.6), value: kids)
+            .padding(.top, 2)
             VStack(spacing: 4) {
                 if sessions.isEmpty {
                     HStack {
@@ -227,6 +236,12 @@ private struct SessionRow: View {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 5) {
                         Text(session.project).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                        if session.kids > 0 {
+                            Text("서브 \(session.kids)").font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.black)
+                                .padding(.horizontal, 4)
+                                .background(Capsule().fill(ClawdView.clayLt))
+                        }
                         Text(session.agent == .claude ? "Claude" : "Codex")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(session.agent == .claude ? ClawdView.clay : .white.opacity(0.6))

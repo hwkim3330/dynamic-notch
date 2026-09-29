@@ -88,7 +88,8 @@ private struct ContentSwitch: View {
             if let m = model.media { CompactMusicView(media: m) }
         case .claudeCompact:
             if let s = model.headlineSession {
-                CompactClaudeView(session: s, others: model.sessions.filter { $0.state != .done }.count - 1)
+                CompactClaudeView(session: s, others: model.sessions.filter { $0.state != .done }.count - 1,
+                                  kids: model.sessions.reduce(0) { $0 + $1.kids })
             }
         case .callCompact:
             if case .active(_, let since) = model.call { CompactCallView(since: since) }

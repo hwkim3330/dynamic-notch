@@ -10,6 +10,15 @@ struct Main {
         if CommandLine.arguments.contains("--claude-hook") { ClaudeHook.run() }
         if CommandLine.arguments.contains("--statusline") { ClaudeHook.statusLine() }
 
+        // 이미 떠 있으면 두 번째 실행은 조용히 끝낸다 (노치가 두 겹으로 그려지지 않게)
+        let me = ProcessInfo.processInfo.processIdentifier
+        let myPath = Bundle.main.executablePath
+        let others = NSWorkspace.shared.runningApplications.filter {
+            $0.processIdentifier != me && ($0.bundleIdentifier == "com.hwkim3330.dynamicnotch"
+                || ($0.executableURL?.path == myPath && myPath != nil))
+        }
+        if !others.isEmpty { exit(0) }
+
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate

@@ -55,6 +55,8 @@ public struct ClaudeSession: Equatable, Identifiable {
     public var terminalBundleID: String?
     /// 세션이 도는 터미널 탭의 tty (/dev/ttys003) — 여러 창 중 정확한 탭으로 이동할 때 씀
     public var tty: String?
+    /// 지금 돌고 있는 서브에이전트 수 → 새끼 Clawd
+    public var kids: Int = 0
 
     public init(id: String, project: String, state: State, since: Date = Date(),
                 detail: String = "", agent: AgentKind = .claude,
