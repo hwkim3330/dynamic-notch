@@ -37,7 +37,7 @@ struct CodexBot: View {
     let unit: CGFloat
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30)) { tl in
+        TimelineView(.animation(minimumInterval: unit < 3 ? 1 / 10 : 1 / 24, paused: AnimationGate.paused)) { tl in
             let t = tl.date.timeIntervalSinceReferenceDate
             let u = unit
             let hop: Double = switch mood {

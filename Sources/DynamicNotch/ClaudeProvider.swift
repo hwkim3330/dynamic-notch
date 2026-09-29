@@ -211,11 +211,27 @@ final class ClaudeProvider {
         model.upsert(s)
     }
 
+    /// 5시간 한도 % 기록 (예측용)
+    private var fiveHistory: [(t: Date, pct: Double)] = []
+
     private func updateLimits(_ i: [String: String]) {
         func d(_ k: String) -> Double? { i[k].flatMap(Double.init) }
         func date(_ k: String) -> Date? { d(k).flatMap { $0 > 0 ? Date(timeIntervalSince1970: $0) : nil } }
         let old = model.limits?.fiveHour ?? 0
-        let l = PlanLimits(fiveHour: d("five"), fiveHourResets: date("fiveReset"), week: d("week"), weekResets: date("weekReset"))
+        var l = PlanLimits(fiveHour: d("five"), fiveHourResets: date("fiveReset"), week: d("week"), weekResets: date("weekReset"))
+        if let p = l.fiveHour {
+            // 초기화되면(값이 떨어지면) 기록을 새로 시작
+            if let last = fiveHistory.last, p < last.pct - 5 { fiveHistory.removeAll() }
+            fiveHistory.append((Date(), p))
+            fiveHistory.removeAll { Date().timeIntervalSince($0.t) > 45 * 60 }
+            // 최근 45분 기울기로 100% 도달 시각 추정
+            if let first = fiveHistory.first, let last = fiveHistory.last,
+               last.t.timeIntervalSince(first.t) > 5 * 60, last.pct > first.pct {
+                let rate = (last.pct - first.pct) / last.t.timeIntervalSince(first.t)   // %/초
+                let hit = Date().addingTimeInterval((100 - last.pct) / rate)
+                if let reset = l.fiveHourResets, hit < reset { l.fiveHourHitsAt = hit }
+            }
+        }
         model.limits = l
         // 80%, 95% 를 처음 넘을 때 한 번 알린다
         if let now = l.fiveHour, let t = [95.0, 80.0].first(where: { now >= $0 && old < $0 }) {

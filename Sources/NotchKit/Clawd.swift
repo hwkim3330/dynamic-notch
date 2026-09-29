@@ -28,7 +28,8 @@ public struct ClawdView: View {
     static let cream = Color(red: 1, green: 0.961, blue: 0.886)      // #FFF5E2
 
     public var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: false)) { tl in
+        // 노치 날개에 들어가는 작은 크기는 12fps 로도 충분하다 (몇 시간씩 떠 있으니 전력 절약)
+        TimelineView(.animation(minimumInterval: unit < 3 ? 1 / 10 : 1 / 24, paused: AnimationGate.paused)) { tl in
             let t = tl.date.timeIntervalSinceReferenceDate + seed * 3.7
             Canvas { ctx, size in
                 draw(&ctx, size: size, t: t)

@@ -78,9 +78,10 @@ final class SensorProvider {
 
     init(model: NotchModel) {
         self.model = model
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.poll() }
         }
+        timer?.tolerance = 0.5
         poll()
     }
 
@@ -230,15 +231,16 @@ final class RemoteProvider {
 
     init(model: NotchModel) {
         self.model = model
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.poll() }
         }
+        timer?.tolerance = 1
         poll()
     }
 
     private func poll() {
-        let pids = NSWorkspace.shared.runningApplications
-            .filter { ($0.bundleIdentifier ?? "").lowercased().contains("rustdesk") }
+        // 전체 앱 목록을 훑지 않고 RustDesk 번들만 찾는다
+        let pids = NSRunningApplication.runningApplications(withBundleIdentifier: "com.carriez.rustdesk")
             .map(\.processIdentifier)
         let on = pids.contains { Self.args(of: $0).contains("--cm") }
         if let last, last != on { model.show(.remote(on: on), for: on ? 3 : 2) }

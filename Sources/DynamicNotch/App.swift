@@ -48,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { self?.panel.reposition() }
         }
         setupStatusItem()
+        watchSleep()
 
         if let i = CommandLine.arguments.firstIndex(of: "--open"), i + 1 < CommandLine.arguments.count,
            let tab = NotchTab(rawValue: CommandLine.arguments[i + 1]) {
@@ -56,6 +57,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--demo") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [model] in NotchDemo.run(model) }
         }
+    }
+
+    /// 화면이 꺼지거나 잠기면 애니메이션과 마우스 추적을 멈춘다
+    private func watchSleep() {
+        let ws = NSWorkspace.shared.notificationCenter
+        let dn = DistributedNotificationCenter.default()
+        let pause: (Bool) -> Void = { [weak self] p in
+            MainActor.assumeIsolated {
+                AnimationGate.paused = p
+                self?.panel.setTracking(!p)
+                self?.model.objectWillChange.send()
+            }
+        }
+        for n in [NSWorkspace.screensDidSleepNotification, NSWorkspace.willSleepNotification] {
+            ws.addObserver(forName: n, object: nil, queue: .main) { _ in pause(true) }
+        }
+        for n in [NSWorkspace.screensDidWakeNotification, NSWorkspace.didWakeNotification] {
+            ws.addObserver(forName: n, object: nil, queue: .main) { [weak self] _ in
+                pause(false)
+                MainActor.assumeIsolated { self?.panel.reposition() }
+            }
+        }
+        dn.addObserver(forName: Notification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { _ in pause(true) }
+        dn.addObserver(forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main) { _ in pause(false) }
     }
 
     private func setupStatusItem() {

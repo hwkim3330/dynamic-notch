@@ -100,6 +100,8 @@ public struct PlanLimits: Equatable {
     public var fiveHourResets: Date?
     public var week: Double?
     public var weekResets: Date?
+    /// 지금 속도로 5시간 한도 100%에 닿는 예상 시각 (초기화 전에 닿을 때만)
+    public var fiveHourHitsAt: Date?
     public var updated: Date
     public init(fiveHour: Double?, fiveHourResets: Date?, week: Double?, weekResets: Date?, updated: Date = Date()) {
         self.fiveHour = fiveHour; self.fiveHourResets = fiveHourResets
@@ -198,6 +200,8 @@ public final class NotchModel: ObservableObject {
     @Published public private(set) var transient: Transient?
     @Published public private(set) var expanded = false
     @Published public private(set) var peeking = false
+    /// 전체 화면 앱(영상 등)을 볼 땐 계속 떠 있는 컴팩트 표시를 숨긴다. 잠깐 뜨는 알림은 그대로.
+    @Published public var quietForFullscreen = false
     public var onRevealFile: ((String) -> Void)?
 
     public weak var controls: NotchControls?
@@ -234,6 +238,7 @@ public final class NotchModel: ObservableObject {
         if case .ringing = call { return .callRinging }
         if let t = transient { return .transient(t) }
         if expanded { return .expanded(availableTabs.contains(tab) ? tab : .claude) }
+        if quietForFullscreen { return peeking ? .peek : .idle }
         if case .active = call { return .callCompact }
         if headlineSession != nil { return .claudeCompact }
         if media?.isPlaying == true { return .musicCompact }

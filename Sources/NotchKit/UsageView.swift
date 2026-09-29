@@ -27,6 +27,14 @@ struct UsagePanel: View {
                     if let v = l.fiveHour { LimitBar(title: "5시간 한도", pct: v, resets: l.fiveHourResets) }
                     if let v = l.week { LimitBar(title: "주간 한도", pct: v, resets: l.weekResets) }
                 }
+                if let hit = l.fiveHourHitsAt {
+                    TimelineView(.periodic(from: .now, by: 30)) { tl in
+                        Label("이 속도면 \(untilLabel(hit, now: tl.date).replacingOccurrences(of: " 후", with: "")) 뒤 5시간 한도에 닿아요",
+                              systemImage: "gauge.with.dots.needle.67percent")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(ClawdView.ochre)
+                    }
+                }
             }
             if let u = usage {
                 if false, let l = u.limits {

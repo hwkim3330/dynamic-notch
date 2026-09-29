@@ -2,6 +2,11 @@ import SwiftUI
 
 // MARK: - 공용 조각
 
+/// 화면이 꺼졌거나 잠겼을 때 모든 반복 애니메이션을 멈춘다 (앱이 설정)
+public enum AnimationGate {
+    @MainActor public static var paused = false
+}
+
 struct ArtworkView: View {
     let image: CGImage?
     let tint: Color
@@ -32,7 +37,7 @@ struct Waveform: View {
     var height: CGFloat = 16
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: !active)) { tl in
+        TimelineView(.animation(minimumInterval: 1 / 15, paused: !active || AnimationGate.paused)) { tl in
             let t = tl.date.timeIntervalSinceReferenceDate
             HStack(alignment: .center, spacing: 2.2) {
                 ForEach(0..<bars, id: \.self) { i in

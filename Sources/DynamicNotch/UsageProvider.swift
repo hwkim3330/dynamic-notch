@@ -52,18 +52,34 @@ final class UsageProvider: @unchecked Sendable {
         return out
     }
 
+    /// 새로 붙은 줄만 4MB 씩 끊어 읽는다 (처음 실행 때 수백 MB 를 한 번에 올리지 않게)
     private func readNew(_ url: URL, _ each: (Data) -> Void) {
         let path = url.path
         guard let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?.uint64Value,
               let fh = FileHandle(forReadingAtPath: path) else { return }
-        let from = offsets[path] ?? 0
-        guard size > from else { return }
-        try? fh.seek(toOffset: from)
-        let data = fh.readData(ofLength: Int(size - from))
-        try? fh.close()
-        guard let last = data.lastIndex(of: 0x0A) else { return }
-        offsets[path] = from + UInt64(last + 1)
-        for line in data[..<last].split(separator: 0x0A) { each(Data(line)) }
+        defer { try? fh.close() }
+        var pos = offsets[path] ?? 0
+        guard size > pos else { return }
+        try? fh.seek(toOffset: pos)
+        let chunk = 4 << 20
+        var carry = Data()
+        while pos < size {
+            autoreleasepool {
+                let data = fh.readData(ofLength: chunk)
+                guard !data.isEmpty else { pos = size; return }
+                var buf = carry
+                buf.append(data)
+                if let last = buf.lastIndex(of: 0x0A) {
+                    for line in buf[buf.startIndex..<last].split(separator: 0x0A) { each(Data(line)) }
+                    carry = Data(buf[(last + 1)...])
+                } else {
+                    carry = buf
+                }
+                pos += UInt64(data.count)
+            }
+        }
+        // 덜 써진 마지막 줄은 다음 번에
+        offsets[path] = pos - UInt64(carry.count)
     }
 
     private static let iso: ISO8601DateFormatter = {

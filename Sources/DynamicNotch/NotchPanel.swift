@@ -37,13 +37,24 @@ final class NotchPanel: NSPanel {
         host.frame = CGRect(origin: .zero, size: Self.canvas)
         contentView = host
 
-        timer = Timer.scheduledTimer(withTimeInterval: 1 / 30, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.trackMouse() }
-        }
+        setTracking(true)
         // 다른 곳을 클릭하면 접는다 (메뉴에서 연 미러 등)
         NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             MainActor.assumeIsolated { self?.model.collapse() }
         }
+    }
+
+    /// 마우스 위치 추적 (20Hz). 화면이 꺼져 있으면 끈다.
+    func setTracking(_ on: Bool) {
+        timer?.invalidate()
+        timer = nil
+        guard on else { return }
+        let t = Timer(timeInterval: 1 / 20, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.trackMouse() }
+        }
+        t.tolerance = 0.01
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
     }
 
     override var canBecomeKey: Bool { false }
@@ -68,8 +79,15 @@ final class NotchPanel: NSPanel {
                         width: Self.canvas.width, height: Self.canvas.height), display: true)
     }
 
+    static var menuBarAutoHides: Bool {
+        UserDefaults(suiteName: UserDefaults.globalDomain)?.bool(forKey: "_HIHideMenuBar") ?? false
+    }
+
     private func trackMouse() {
         guard let screen = screenRef else { return }
+        // 메뉴 막대가 없는 상태 = 전체 화면 앱 (메뉴 막대 자동 숨김을 켠 사람은 제외)
+        let fullscreen = !Self.menuBarAutoHides && screen.visibleFrame.maxY >= screen.frame.maxY - 1
+        if model.quietForFullscreen != fullscreen { model.quietForFullscreen = fullscreen }
         let l = model.currentLayout.outerSize
         let top = screen.frame.maxY
         let cx = frame.midX
