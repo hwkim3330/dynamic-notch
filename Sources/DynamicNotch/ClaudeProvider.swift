@@ -8,8 +8,7 @@ enum ClaudeHook {
 
     /// 훅 모드: stdin 의 훅 JSON 을 읽어 실행 중인 앱에 넘기고 바로 끝낸다
     static func run() -> Never {
-        let data = FileHandle.standardInput.readDataToEndOfFile()
-        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        let json = readInput()
         func str(_ k: String) -> String { (json[k] as? String) ?? "" }
         let env = ProcessInfo.processInfo.environment
         let info: [String: String] = [
@@ -31,8 +30,7 @@ enum ClaudeHook {
 
     /// 상태 줄 모드: Claude Code 가 주는 상태 JSON 에서 구독 한도를 앱으로 넘기고, 짧은 상태 줄을 출력한다
     static func statusLine() -> Never {
-        let data = FileHandle.standardInput.readDataToEndOfFile()
-        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        let json = readInput()
         let rl = json["rate_limits"] as? [String: Any] ?? [:]
         func win(_ k: String) -> (Double, Double)? {
             guard let w = rl[k] as? [String: Any], let p = (w["used_percentage"] as? NSNumber)?.doubleValue else { return nil }
@@ -56,6 +54,28 @@ enum ClaudeHook {
         }
         print(parts.joined(separator: " · "))
         exit(0)
+    }
+
+    /// stdin 에서 JSON 하나만 읽는다. EOF 를 기다리지 않는다.
+    /// Claude Code 가 stdin 을 닫지 않는 경우가 있어서, EOF 를 기다리면 훅이 영원히 안 끝나고
+    /// 세션까지 멈췄다. 그래서 (1) JSON 이 완성되면 바로 끝, (2) 1.5초 지나면 있는 것만,
+    /// (3) 무슨 일이 있어도 3초 뒤엔 프로세스를 끝낸다.
+    static func readInput() -> [String: Any] {
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3) { exit(0) }
+        let fd = FileHandle.standardInput.fileDescriptor
+        var buf = Data()
+        var chunk = [UInt8](repeating: 0, count: 64 << 10)
+        let deadline = Date().addingTimeInterval(1.5)
+        while Date() < deadline {
+            var p = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+            let left = Int32(max(1, deadline.timeIntervalSinceNow * 1000))
+            guard poll(&p, 1, min(left, 200)) > 0 else { continue }
+            let n = read(fd, &chunk, chunk.count)
+            if n <= 0 { break }
+            buf.append(chunk, count: n)
+            if let j = (try? JSONSerialization.jsonObject(with: buf)) as? [String: Any] { return j }
+        }
+        return (try? JSONSerialization.jsonObject(with: buf)) as? [String: Any] ?? [:]
     }
 
     /// 훅 프로세스는 stdin 이 파이프라 tty 가 없다. 부모(셸 → claude)를 거슬러 올라가 첫 tty 를 찾는다.
