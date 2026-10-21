@@ -58,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         setupStatusItem()
         watchSleep()
+        ScrollReverser.shared.start()
 
         if let i = CommandLine.arguments.firstIndex(of: "--open"), i + 1 < CommandLine.arguments.count,
            let tab = NotchTab(rawValue: CommandLine.arguments[i + 1]) {
@@ -104,6 +105,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(item("사용량 보기", #selector(openUsage), "u"))
         menu.addItem(item("미러 열기", #selector(openMirror), ""))
         menu.addItem(.separator())
+        // 스크롤 뒤집기 — Scroll Reverser 대신
+        let scroll = NSMenuItem(title: "스크롤 뒤집기", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        for (n, k) in ScrollReverser.Key.allCases.enumerated() {
+            let it = item(k.title, #selector(toggleScroll), "")
+            it.tag = n
+            it.state = ScrollReverser.shared.isOn(k) ? .on : .off
+            sub.addItem(it)
+            if k == .enabled { sub.addItem(.separator()) }
+        }
+        scroll.submenu = sub
+        menu.addItem(scroll)
+        // 마우스 — Logi Options+ 대신
+        let mouse = NSMenuItem(title: "마우스", action: nil, keyEquivalent: "")
+        let msub = NSMenu()
+        for (n, k) in MouseTools.Key.allCases.enumerated() {
+            let it = item(k.title, #selector(toggleMouse), ""); it.tag = n
+            it.state = MouseTools.shared.isOn(k) ? .on : .off; msub.addItem(it)
+        }
+        msub.addItem(.separator())
+        for (n, (name, v)) in MouseTools.speeds.enumerated() {
+            let it = item("휠 속도: \(name)", #selector(setMouseSpeed), ""); it.tag = n
+            it.state = MouseTools.shared.speed == v ? .on : .off; msub.addItem(it)
+        }
+        mouse.submenu = msub
+        menu.addItem(mouse)
+        menu.addItem(.separator())
         let login = item("로그인 시 자동 실행", #selector(toggleLogin), "")
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(login)
@@ -122,6 +150,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func openMirror() { model.open(.camera) }
     @objc func openUsage() { model.open(.usage) }
     @objc func quit() { NSApp.terminate(nil) }
+
+    @objc func toggleMouse(_ sender: NSMenuItem) {
+        let k = MouseTools.Key.allCases[sender.tag]
+        MouseTools.shared.toggle(k)
+        sender.state = MouseTools.shared.isOn(k) ? .on : .off
+    }
+
+    @objc func setMouseSpeed(_ sender: NSMenuItem) {
+        MouseTools.shared.setSpeed(MouseTools.speeds[sender.tag].1)
+        sender.menu?.items.filter { $0.action == #selector(setMouseSpeed) }.forEach { $0.state = .off }
+        sender.state = .on
+    }
+
+    @objc func toggleScroll(_ sender: NSMenuItem) {
+        let k = ScrollReverser.Key.allCases[sender.tag]
+        ScrollReverser.shared.toggle(k)
+        sender.state = ScrollReverser.shared.isOn(k) ? .on : .off
+    }
 
     @objc func toggleLogin(_ sender: NSMenuItem) {
         do {
