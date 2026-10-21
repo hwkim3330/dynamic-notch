@@ -86,7 +86,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for n in [NSWorkspace.screensDidWakeNotification, NSWorkspace.didWakeNotification] {
             ws.addObserver(forName: n, object: nil, queue: .main) { [weak self] _ in
                 pause(false)
-                MainActor.assumeIsolated { self?.panel.reposition() }
+                MainActor.assumeIsolated {
+                    self?.panel.reposition()
+                    // 잠자기 뒤에 이벤트 탭이 조용히 죽는 경우가 있다 — 새로 건다
+                    ScrollReverser.shared.stop(); ScrollReverser.shared.start()
+                }
             }
         }
         dn.addObserver(forName: Notification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { _ in pause(true) }

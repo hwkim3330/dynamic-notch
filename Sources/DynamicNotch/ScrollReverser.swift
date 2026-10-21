@@ -109,6 +109,11 @@ private func scrollCallback(proxy: CGEventTapProxy, type: CGEventType, event: CG
     if event.getIntegerValueField(.eventSourceUserData) == MouseFlags.marker {
         return Unmanaged.passUnretained(event)
     }
+    // 다른 프로그램이 만든 이벤트(화면 공유, Universal Control, Deskflow, RustDesk …)는 그대로 통과.
+    // 실제 장치에서 온 이벤트는 보낸 프로세스가 0 이다. 원격 쪽 설정까지 뒤집으면 방향이 두 번 바뀐다.
+    if event.getIntegerValueField(.eventSourceUnixProcessID) != 0 {
+        return Unmanaged.passUnretained(event)
+    }
     if type == .otherMouseDown || type == .otherMouseUp { return handleMouse(type: type, event: event) }
     guard type == .scrollWheel else { return Unmanaged.passUnretained(event) }
 
