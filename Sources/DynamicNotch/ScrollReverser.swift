@@ -33,6 +33,7 @@ final class ScrollReverser {
 
     private let defaults = UserDefaults.standard
     private var tap: CFMachPort?
+    private var prompted = false
     private var source: CFRunLoopSource?
 
     private init() {
@@ -57,7 +58,10 @@ final class ScrollReverser {
     func start() {
         Flags.store(self)
         guard tap == nil else { return }
-        let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        // 권한 요청 창은 처음 한 번만. 그 뒤엔 허용될 때까지 조용히 확인만 한다.
+        // (매번 창을 띄우면 허용한 뒤에도 몇 초마다 다시 떴다.)
+        let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: !prompted] as CFDictionary
+        prompted = true
         guard AXIsProcessTrustedWithOptions(opts) else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.start() }
             return

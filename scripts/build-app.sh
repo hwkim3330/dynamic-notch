@@ -15,7 +15,14 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/DynamicNotch"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 [[ -f Resources/AppIcon.icns ]] && cp Resources/AppIcon.icns "$APP/Contents/Resources/"
-codesign --force --sign - --timestamp=none "$APP"
+# 고정 서명. 임시 서명(-)은 빌드마다 서명이 바뀌어 macOS 가 다른 앱으로 보고
+# 손쉬운 사용 권한이 매번 풀렸다. 키체인에 'DynamicNotch Local Signing' 이 있으면 그걸 쓴다.
+SIGN_ID="DynamicNotch Local Signing"
+if security find-identity -p codesigning | grep -q "$SIGN_ID"; then
+  codesign --force --sign "$SIGN_ID" --timestamp=none "$APP"
+else
+  codesign --force --sign - --timestamp=none "$APP"
+fi
 
 DEST="$HOME/Applications/DynamicNotch.app"
 mkdir -p "$HOME/Applications"
