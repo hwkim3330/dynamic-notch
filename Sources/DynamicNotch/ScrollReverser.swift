@@ -62,7 +62,9 @@ final class ScrollReverser {
         // (매번 창을 띄우면 허용한 뒤에도 몇 초마다 다시 떴다.)
         let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: !prompted] as CFDictionary
         prompted = true
-        guard AXIsProcessTrustedWithOptions(opts) else {
+        let trusted = AXIsProcessTrustedWithOptions(opts)
+        ScrollDebug.note("trusted=\(trusted) bundle=\(Bundle.main.bundlePath)")
+        guard trusted else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.start() }
             return
         }
@@ -73,8 +75,10 @@ final class ScrollReverser {
                                         options: .defaultTap, eventsOfInterest: mask,
                                         callback: scrollCallback, userInfo: nil) else {
             NSLog("DynamicNotch: 스크롤 이벤트 탭 생성 실패")
+            ScrollDebug.note("tapCreate 실패")
             return
         }
+        ScrollDebug.note("tap 생성됨")
         tap = t
         Flags.tap = t
         source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, t, 0)
@@ -114,7 +118,8 @@ private func scrollCallback(proxy: CGEventTapProxy, type: CGEventType, event: CG
         return Unmanaged.passUnretained(event)
     }
     // 다른 프로그램이 만든 이벤트(화면 공유, Universal Control, Deskflow, RustDesk …)는 그대로 통과.
-    // 실제 장치에서 온 이벤트는 보낸 프로세스가 0 이다. 원격 쪽 설정까지 뒤집으면 방향이 두 번 바뀐다.
+    // 실제 장치 이벤트는 보낸 프로세스가 0 이다 — 진단 기록으로 확인함(트랙패드 30개 전부 pid=0).
+    // 원격 쪽 이벤트까지 뒤집으면 상대 기기의 설정 위에 한 번 더 뒤집혀 방향이 꼬인다.
     if event.getIntegerValueField(.eventSourceUnixProcessID) != 0 {
         return Unmanaged.passUnretained(event)
     }
@@ -134,8 +139,43 @@ private func scrollCallback(proxy: CGEventTapProxy, type: CGEventType, event: CG
 }
 
 /// 같은 움직임이 세 가지 단위로 들어 있다. 하나만 바꾸면 앱마다 다르게 반응하니 셋 다 뒤집는다.
+///
+/// 순서가 중요하다(Scroll Reverser 의 MouseTap.m 에서 확인): 줄 단위(DeltaAxis)를 쓰면
+/// macOS 가 픽셀(8배)·고정소수점(1배) 값을 그 자리에서 다시 계산한다. 그래서
+///   1) 세 값을 먼저 다 읽고  2) 줄 → 고정소수점 → 픽셀 순서로 쓴다.
+/// 처음엔 줄 값을 바꾼 뒤에 픽셀 값을 읽어 뒤집었는데, 그건 이미 다시 계산된 값이라
+/// 두 번 뒤집혀 원래 방향으로 돌아갔다.
 private func flip(_ e: CGEvent, _ line: CGEventField, _ point: CGEventField, _ fixed: CGEventField) {
-    e.setIntegerValueField(line, value: -e.getIntegerValueField(line))
-    e.setIntegerValueField(point, value: -e.getIntegerValueField(point))
-    e.setDoubleValueField(fixed, value: -e.getDoubleValueField(fixed))
+    let l = e.getIntegerValueField(line), p = e.getIntegerValueField(point), f = e.getDoubleValueField(fixed)
+    e.setIntegerValueField(line, value: -l)
+    e.setDoubleValueField(fixed, value: -f)
+    e.setIntegerValueField(point, value: -p)
+}
+
+
+/// 진단용 — 처음 30개 스크롤 이벤트의 필드를 파일에 남긴다(~/Library/Logs/DynamicNotch-scroll.log).
+enum ScrollDebug {
+    nonisolated(unsafe) static var n = 0
+    nonisolated(unsafe) static var lastNote = ""
+    static func note(_ s: String) {
+        guard s != lastNote else { return }          // 같은 상태는 한 번만
+        lastNote = s
+        write("[\(Date())] \(s)\n")
+    }
+    static func write(_ line: String) {
+        let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/DynamicNotch-scroll.log")
+        if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(line.data(using: .utf8)!); try? h.close() }
+        else { try? line.write(to: url, atomically: true, encoding: .utf8) }
+    }
+    static func log(_ type: CGEventType, _ e: CGEvent) {
+        guard type == .scrollWheel, n < 30 else { return }
+        n += 1
+        let line = "pid=\(e.getIntegerValueField(.eventSourceUnixProcessID)) "
+            + "state=\(e.getIntegerValueField(.eventSourceStateID)) "
+            + "cont=\(e.getIntegerValueField(.scrollWheelEventIsContinuous)) "
+            + "user=\(e.getIntegerValueField(.eventSourceUserData)) "
+            + "dy=\(e.getIntegerValueField(.scrollWheelEventPointDeltaAxis1)) "
+            + "phase=\(e.getIntegerValueField(.scrollWheelEventScrollPhase))/\(e.getIntegerValueField(.scrollWheelEventMomentumPhase))\n"
+        write(line)
+    }
 }
