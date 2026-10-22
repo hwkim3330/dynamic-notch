@@ -29,8 +29,10 @@ struct Main {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let model = NotchModel()
+    var obs: OBSProvider!
+    private var obsMenu: NSMenu!
     var panel: NotchPanel!
     var statusItem: NSStatusItem!
     var providers: [AnyObject] = []
@@ -47,7 +49,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
             nowPlaying?.refreshPosition()
         }
-        providers = [nowPlaying, ClaudeProvider(model: model), CodexProvider(model: model),
+        obs = OBSProvider(model: model)
+        providers = [nowPlaying, obs, ClaudeProvider(model: model), CodexProvider(model: model),
                      BatteryProvider(model: model), ScreenLockProvider(model: model),
                      SensorProvider(model: model), DownloadsProvider(model: model), RemoteProvider(model: model),
                      UsageProvider(model: model)]
@@ -135,6 +138,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         mouse.submenu = msub
         menu.addItem(mouse)
+        // OBS — 녹화 상태는 노치에, 시작·정지는 여기서
+        let obsItem = NSMenuItem(title: "OBS", action: nil, keyEquivalent: "")
+        obsMenu = NSMenu()
+        obsMenu.delegate = self
+        obsItem.submenu = obsMenu
+        menu.addItem(obsItem)
         menu.addItem(.separator())
         let login = item("로그인 시 자동 실행", #selector(toggleLogin), "")
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
@@ -148,6 +157,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let i = NSMenuItem(title: title, action: sel, keyEquivalent: key)
         i.target = self
         return i
+    }
+
+    /// OBS 메뉴는 열 때마다 상태에 맞게 새로 만든다
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === obsMenu else { return }
+        menu.removeAllItems()
+        let cfg = OBSProvider.readConfig()
+        if cfg == nil || cfg?.enabled == false {
+            menu.addItem(item("OBS 원격 제어 켜기", #selector(enableOBS), ""))
+            return
+        }
+        if !obs.obsRunning {
+            menu.addItem(item("OBS 열기", #selector(launchOBS), ""))
+            return
+        }
+        guard obs.connected else {
+            let it = NSMenuItem(title: "OBS 연결 중… (켜기 전에 열린 OBS 는 다시 켜야 함)", action: nil, keyEquivalent: "")
+            it.isEnabled = false; menu.addItem(it)
+            return
+        }
+        menu.addItem(item(obs.recording ? "녹화 정지" : "녹화 시작", #selector(toggleRecord), ""))
+        if obs.recording {
+            menu.addItem(item(model.recording?.paused == true ? "녹화 재개" : "녹화 일시정지", #selector(pauseRecord), ""))
+        }
+    }
+
+    @objc func toggleRecord() { obs.toggleRecord() }
+    @objc func pauseRecord() { obs.togglePause() }
+    @objc func launchOBS() {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: OBSProvider.bundleID) {
+            NSWorkspace.shared.openApplication(at: url, configuration: .init())
+        }
+    }
+    @objc func enableOBS() {
+        let ok = OBSProvider.enableServer()
+        let a = NSAlert()
+        a.messageText = ok ? "OBS 원격 제어를 켰습니다" : "OBS 설정 파일을 찾지 못했습니다"
+        a.informativeText = ok ? (obs.obsRunning ? "OBS 를 한 번 껐다 켜면 노치에 녹화 상태가 뜹니다." : "OBS 를 켜면 노치에 녹화 상태가 뜹니다.")
+            : "OBS 를 한 번 실행한 뒤 다시 시도하세요."
+        NSApp.activate(ignoringOtherApps: true)
+        a.runModal()
     }
 
     @objc func runDemo() { NotchDemo.run(model) }

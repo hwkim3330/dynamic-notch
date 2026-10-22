@@ -37,7 +37,7 @@ public struct NotchView: View {
 
     private func tapped(_ c: NotchContent) {
         switch c {
-        case .idle, .peek, .musicCompact, .claudeCompact, .callCompact: model.open(nil)
+        case .idle, .peek, .musicCompact, .claudeCompact, .callCompact, .recordCompact: model.open(nil)
         case .transient(.claude): model.dismissTransient(); model.open(.claude)
         case .transient(.download(_, let path)): model.dismissTransient(); model.onRevealFile?(path)
         default: break
@@ -54,6 +54,7 @@ public struct NotchView: View {
                 : (model.headlineSession?.agent == .codex ? .white : ClawdView.clay)
         case .transient(.claude(_, _, _, _, let agent)): agent == .claude ? ClawdView.clay : .white
         case .callRinging, .callCompact: .green
+        case .recordCompact: model.recording?.paused == true ? .orange : .red
         case .transient(.battery(_, let plugged)): plugged ? .green : .clear
         case .transient(.faceID(let ok)), .transient(.unlock(let ok)): ok ? .green : .white
         case .transient(.sensor(let camera, let on)): on ? (camera ? .green : .orange) : .clear
@@ -93,6 +94,8 @@ private struct ContentSwitch: View {
             }
         case .callCompact:
             if case .active(_, let since) = model.call { CompactCallView(since: since) }
+        case .recordCompact:
+            if let r = model.recording { CompactRecordView(rec: r) }
         case .callRinging:
             if case .ringing(let name, let sub) = model.call {
                 RingingCallView(name: name, subtitle: sub,

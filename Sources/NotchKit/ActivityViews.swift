@@ -134,6 +134,35 @@ struct CompactCallView: View {
     }
 }
 
+// MARK: - OBS 녹화
+
+struct CompactRecordView: View {
+    let rec: Recording
+    @State private var blink = false
+    var body: some View {
+        let tint: Color = rec.paused ? .orange : .red
+        Wings {
+            HStack(spacing: 5) {
+                Circle().fill(tint).frame(width: 9, height: 9)
+                    .opacity(rec.paused ? 1 : (blink ? 0.35 : 1))
+                    .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: blink)
+                Text(rec.paused ? "일시정지" : "REC")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(tint)
+            }
+            .fixedSize()
+            .onAppear { blink = true }
+        } right: {
+            TimelineView(.periodic(from: rec.since, by: 1)) { tl in
+                Text(formatTime(rec.paused ? rec.frozen : tl.date.timeIntervalSince(rec.since)))
+                    .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(.white.opacity(rec.paused ? 0.5 : 0.9))
+                    .fixedSize()
+            }
+        }
+    }
+}
+
 // MARK: - 통화 수신
 
 struct RingingCallView: View {

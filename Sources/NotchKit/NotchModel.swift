@@ -135,6 +135,18 @@ public struct UsageSnapshot: Equatable {
     }
 }
 
+/// OBS 녹화 상태 (obs-websocket 으로 받음)
+public struct Recording: Equatable {
+    /// 녹화 시작 시각 (일시정지했던 시간은 빼고 계산한 값)
+    public var since: Date
+    public var paused: Bool
+    /// 일시정지 중에 보여줄 멈춘 시간
+    public var frozen: TimeInterval
+    public init(since: Date, paused: Bool = false, frozen: TimeInterval = 0) {
+        self.since = since; self.paused = paused; self.frozen = frozen
+    }
+}
+
 public enum CallState: Equatable {
     case ringing(name: String, subtitle: String)
     case active(name: String, since: Date)
@@ -167,6 +179,7 @@ public enum NotchContent: Equatable {
     case musicCompact
     case claudeCompact
     case callCompact
+    case recordCompact
     case callRinging
     case transient(Transient)
     case expanded(NotchTab)
@@ -197,6 +210,7 @@ public final class NotchModel: ObservableObject {
     @Published public var nowPlaying: NowPlaying?
     @Published public var demoNowPlaying: NowPlaying?
     @Published public var call: CallState?
+    @Published public var recording: Recording?
     @Published public var sessions: [ClaudeSession] = []
     @Published public var tab: NotchTab = .claude
     @Published public var usage: UsageSnapshot?
@@ -242,8 +256,10 @@ public final class NotchModel: ObservableObject {
         if case .ringing = call { return .callRinging }
         if let t = transient { return .transient(t) }
         if expanded { return .expanded(availableTabs.contains(tab) ? tab : .claude) }
-        if quietForFullscreen { return peeking ? .peek : .idle }
         if case .active = call { return .callCompact }
+        // 녹화 중 표시는 전체 화면에서도 남긴다 — 녹화가 돌고 있는 걸 모르면 곤란하다
+        if recording != nil { return .recordCompact }
+        if quietForFullscreen { return peeking ? .peek : .idle }
         if headlineSession != nil { return .claudeCompact }
         if media?.isPlaying == true { return .musicCompact }
         if peeking { return .peek }
@@ -268,7 +284,7 @@ public final class NotchModel: ObservableObject {
             return Layout(size: CGSize(width: n.width + 2 * 44, height: n.height), topRadius: 8, bottomRadius: 14)
         case .musicCompact:
             return Layout(size: CGSize(width: n.width + 2 * (n.height + 14), height: n.height), topRadius: 8, bottomRadius: 14)
-        case .claudeCompact, .callCompact:
+        case .claudeCompact, .callCompact, .recordCompact:
             return Layout(size: CGSize(width: n.width + 2 * 74, height: n.height), topRadius: 8, bottomRadius: 14)
         case .transient(let t):
             switch t {
@@ -351,7 +367,7 @@ public final class NotchModel: ObservableObject {
             guard let self, !Task.isCancelled else { return }
             if h {
                 switch self.content {
-                case .musicCompact, .claudeCompact, .callCompact: self.open(nil)
+                case .musicCompact, .claudeCompact, .callCompact, .recordCompact: self.open(nil)
                 case .idle: self.peeking = true
                 default: break
                 }
