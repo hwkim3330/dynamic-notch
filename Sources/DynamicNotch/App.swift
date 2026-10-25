@@ -50,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             nowPlaying?.refreshPosition()
         }
         obs = OBSProvider(model: model)
-        providers = [nowPlaying, obs, ClaudeProvider(model: model), CodexProvider(model: model),
+        providers = [nowPlaying, obs, HardwareSensors(model: model), ClaudeProvider(model: model), CodexProvider(model: model),
                      BatteryProvider(model: model), ScreenLockProvider(model: model),
                      SensorProvider(model: model), DownloadsProvider(model: model), RemoteProvider(model: model),
                      UsageProvider(model: model)]
@@ -111,6 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item("데모 재생", #selector(runDemo), "d"))
         menu.addItem(item("사용량 보기", #selector(openUsage), "u"))
         menu.addItem(item("미러 열기", #selector(openMirror), ""))
+        menu.addItem(item("센서 보기 (화면 각도 · 트랙패드 저울)", #selector(openSensors), ""))
         menu.addItem(.separator())
         // 스크롤 뒤집기 — Scroll Reverser 대신
         let scroll = NSMenuItem(title: "스크롤 뒤집기", action: nil, keyEquivalent: "")
@@ -203,6 +204,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func runDemo() { NotchDemo.run(model) }
     @objc func openMirror() { model.open(.camera) }
     @objc func openUsage() { model.open(.usage) }
+    @objc func openSensors() { model.open(.sensors) }
     @objc func quit() { NSApp.terminate(nil) }
 
     @objc func toggleMouse(_ sender: NSMenuItem) {

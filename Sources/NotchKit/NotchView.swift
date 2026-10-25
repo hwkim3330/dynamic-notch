@@ -140,6 +140,8 @@ private struct ExpandedView: View {
                     CameraPanel(make: model.cameraView)
                 case .usage:
                     UsagePanel(usage: model.usage, limits: model.limits)
+                case .sensors:
+                    SensorPanel(model: model)
                 }
             }
             .id(tab)

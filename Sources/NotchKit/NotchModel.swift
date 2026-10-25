@@ -153,13 +153,14 @@ public enum CallState: Equatable {
 }
 
 public enum NotchTab: String, CaseIterable {
-    case claude, usage, camera, music
+    case claude, usage, camera, music, sensors
     var symbol: String {
         switch self {
         case .claude: "sparkle"
         case .usage: "chart.bar.fill"
         case .camera: "camera.fill"
         case .music: "music.note"
+        case .sensors: "gauge.with.needle"
         }
     }
     var title: String {
@@ -168,6 +169,7 @@ public enum NotchTab: String, CaseIterable {
         case .usage: "사용량"
         case .camera: "미러"
         case .music: "음악"
+        case .sensors: "센서"
         }
     }
 }
@@ -211,6 +213,12 @@ public final class NotchModel: ObservableObject {
     @Published public var demoNowPlaying: NowPlaying?
     @Published public var call: CallState?
     @Published public var recording: Recording?
+    /// 화면(뚜껑) 각도, 도 — 센서 탭을 열어 둔 동안만 갱신
+    @Published public var lidAngle: Int?
+    /// 트랙패드 압력 (영점 뺀 값, 대략 그램) — 손가락이 닿아 있을 때만
+    @Published public var trackpadGrams: Double?
+    @Published public var trackpadTouching = false
+    public var onTare: (() -> Void)?
     @Published public var sessions: [ClaudeSession] = []
     @Published public var tab: NotchTab = .claude
     @Published public var usage: UsageSnapshot?
@@ -249,7 +257,7 @@ public final class NotchModel: ObservableObject {
     }
 
     public var availableTabs: [NotchTab] {
-        media != nil ? [.claude, .usage, .music, .camera] : [.claude, .usage, .camera]
+        media != nil ? [.claude, .usage, .music, .camera, .sensors] : [.claude, .usage, .camera, .sensors]
     }
 
     public var content: NotchContent {
@@ -309,6 +317,8 @@ public final class NotchModel: ObservableObject {
                 return Layout(size: CGSize(width: wide, height: n.height + 132), topRadius: 12, bottomRadius: 30)
             case .music:
                 return Layout(size: CGSize(width: wide, height: n.height + 142), topRadius: 12, bottomRadius: 32)
+            case .sensors:
+                return Layout(size: CGSize(width: wide, height: n.height + 118), topRadius: 12, bottomRadius: 30)
             }
         }
     }
