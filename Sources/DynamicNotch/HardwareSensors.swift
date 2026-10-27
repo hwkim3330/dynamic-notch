@@ -15,6 +15,7 @@ final class HardwareSensors {
     private var subs: Set<AnyCancellable> = []
     private var timer: Timer?
     private var lid: IOHIDDevice?
+    private var hid: IOHIDManager?        // 장치 연결은 이 관리자가 살아 있는 동안만 유지된다
     private var mt: UnsafeMutableRawPointer?
     private var tare = 0.0
 
@@ -31,7 +32,7 @@ final class HardwareSensors {
     }
 
     private func start() {
-        if lid == nil { lid = Self.openLid() }
+        if lid == nil { openLid() }
         startTouch()
         timer = Timer.scheduledTimer(withTimeInterval: 1 / 15, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
@@ -46,7 +47,9 @@ final class HardwareSensors {
     private func tick() {
         if let d = lid {
             var buf = [UInt8](repeating: 0, count: 8); var len = buf.count
-            if IOHIDDeviceGetReport(d, kIOHIDReportTypeFeature, 1, &buf, &len) == kIOReturnSuccess, len >= 3 {
+            let r = IOHIDDeviceGetReport(d, kIOHIDReportTypeFeature, 1, &buf, &len)
+            if r != kIOReturnSuccess { ScrollDebug.note("화면 각도 읽기 실패 \(r)") }
+            if r == kIOReturnSuccess, len >= 3 {
                 let a = Int(buf[1]) | Int(buf[2]) << 8
                 if model.lidAngle != a { model.lidAngle = a }
             }
@@ -58,14 +61,18 @@ final class HardwareSensors {
         if model.trackpadGrams != g { model.trackpadGrams = g }
     }
 
-    private static func openLid() -> IOHIDDevice? {
+    private func openLid() {
         let m = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
         let match: NSDictionary = ["VendorID": 0x05AC, "ProductID": 0x8104, "PrimaryUsagePage": 0x0020, "PrimaryUsage": 0x008A]
         IOHIDManagerSetDeviceMatching(m, match as CFDictionary)
-        IOHIDManagerOpen(m, IOOptionBits(kIOHIDOptionsTypeNone))
-        guard let set = IOHIDManagerCopyDevices(m) as? Set<IOHIDDevice>, let d = set.first,
-              IOHIDDeviceOpen(d, IOOptionBits(kIOHIDOptionsTypeNone)) == kIOReturnSuccess else { return nil }
-        return d
+        let r = IOHIDManagerOpen(m, IOOptionBits(kIOHIDOptionsTypeNone))
+        hid = m
+        guard let set = IOHIDManagerCopyDevices(m) as? Set<IOHIDDevice>, let d = set.first else {
+            ScrollDebug.note("화면 각도 센서 못 찾음 (manager open \(r))"); return
+        }
+        let o = IOHIDDeviceOpen(d, IOOptionBits(kIOHIDOptionsTypeNone))
+        ScrollDebug.note("화면 각도 센서 open \(o)")
+        lid = d
     }
 
     // MARK: - MultitouchSupport (비공개 프레임워크라 dlopen 으로 부른다)

@@ -37,8 +37,22 @@ final class CodexProvider {
         return out
     }
 
+    /// 강제 종료된 Codex 는 '작업 완료' 줄을 남기지 않는다. 기록이 오래 멈춘 '작업 중' 세션은 내린다.
+    private func dropStale(_ files: [URL]) {
+        let now = Date()
+        for url in files {
+            let id = "codex:" + url.deletingPathExtension().lastPathComponent
+            guard let s = model.sessions.first(where: { $0.id == id }), s.state != .done,
+                  let m = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date,
+                  now.timeIntervalSince(m) > 15 * 60 else { continue }
+            model.removeSession(id)
+        }
+    }
+
     private func scan(initial: Bool) {
-        for url in recentFiles() {
+        let files = recentFiles()
+        defer { dropStale(files) }
+        for url in files {
             let path = url.path
             guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
                   let size = (attrs[.size] as? NSNumber)?.uint64Value else { continue }
