@@ -48,7 +48,7 @@ final class HardwareSensors {
         if let d = lid {
             var buf = [UInt8](repeating: 0, count: 8); var len = buf.count
             let r = IOHIDDeviceGetReport(d, kIOHIDReportTypeFeature, 1, &buf, &len)
-            if r != kIOReturnSuccess { ScrollDebug.note("화면 각도 읽기 실패 \(r)") }
+            if r != kIOReturnSuccess { DNLog.note("화면 각도 읽기 실패 \(r)") }
             if r == kIOReturnSuccess, len >= 3 {
                 let a = Int(buf[1]) | Int(buf[2]) << 8
                 if model.lidAngle != a { model.lidAngle = a }
@@ -68,10 +68,10 @@ final class HardwareSensors {
         let r = IOHIDManagerOpen(m, IOOptionBits(kIOHIDOptionsTypeNone))
         hid = m
         guard let set = IOHIDManagerCopyDevices(m) as? Set<IOHIDDevice>, let d = set.first else {
-            ScrollDebug.note("화면 각도 센서 못 찾음 (manager open \(r))"); return
+            DNLog.note("화면 각도 센서 못 찾음 (manager open \(r))"); return
         }
         let o = IOHIDDeviceOpen(d, IOOptionBits(kIOHIDOptionsTypeNone))
-        ScrollDebug.note("화면 각도 센서 open \(o)")
+        DNLog.note("화면 각도 센서 open \(o)")
         lid = d
     }
 

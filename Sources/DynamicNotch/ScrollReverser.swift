@@ -63,7 +63,7 @@ final class ScrollReverser {
         let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: !prompted] as CFDictionary
         prompted = true
         let trusted = AXIsProcessTrustedWithOptions(opts)
-        ScrollDebug.note("trusted=\(trusted) bundle=\(Bundle.main.bundlePath)")
+        DNLog.note("trusted=\(trusted) bundle=\(Bundle.main.bundlePath)")
         guard trusted else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.start() }
             return
@@ -75,10 +75,10 @@ final class ScrollReverser {
                                         options: .defaultTap, eventsOfInterest: mask,
                                         callback: scrollCallback, userInfo: nil) else {
             NSLog("DynamicNotch: 스크롤 이벤트 탭 생성 실패")
-            ScrollDebug.note("tapCreate 실패")
+            DNLog.note("tapCreate 실패")
             return
         }
-        ScrollDebug.note("tap 생성됨")
+        DNLog.note("tap 생성됨")
         tap = t
         Flags.tap = t
         source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, t, 0)
@@ -150,32 +150,4 @@ private func flip(_ e: CGEvent, _ line: CGEventField, _ point: CGEventField, _ f
     e.setIntegerValueField(line, value: -l)
     e.setDoubleValueField(fixed, value: -f)
     e.setIntegerValueField(point, value: -p)
-}
-
-
-/// 진단용 — 처음 30개 스크롤 이벤트의 필드를 파일에 남긴다(~/Library/Logs/DynamicNotch-scroll.log).
-enum ScrollDebug {
-    nonisolated(unsafe) static var n = 0
-    nonisolated(unsafe) static var lastNote = ""
-    static func note(_ s: String) {
-        guard s != lastNote else { return }          // 같은 상태는 한 번만
-        lastNote = s
-        write("[\(Date())] \(s)\n")
-    }
-    static func write(_ line: String) {
-        let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/DynamicNotch-scroll.log")
-        if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(line.data(using: .utf8)!); try? h.close() }
-        else { try? line.write(to: url, atomically: true, encoding: .utf8) }
-    }
-    static func log(_ type: CGEventType, _ e: CGEvent) {
-        guard type == .scrollWheel, n < 30 else { return }
-        n += 1
-        let line = "pid=\(e.getIntegerValueField(.eventSourceUnixProcessID)) "
-            + "state=\(e.getIntegerValueField(.eventSourceStateID)) "
-            + "cont=\(e.getIntegerValueField(.scrollWheelEventIsContinuous)) "
-            + "user=\(e.getIntegerValueField(.eventSourceUserData)) "
-            + "dy=\(e.getIntegerValueField(.scrollWheelEventPointDeltaAxis1)) "
-            + "phase=\(e.getIntegerValueField(.scrollWheelEventScrollPhase))/\(e.getIntegerValueField(.scrollWheelEventMomentumPhase))\n"
-        write(line)
-    }
 }

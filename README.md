@@ -21,9 +21,20 @@
 | 📷 **미러** | 노치(카메라 자리)에서 바로 내장 카메라 미리보기를 연다. 미러를 연 동안에만 카메라가 켜진다 |
 | 🟢 **카메라·마이크 감지** | 다른 앱이 카메라나 마이크를 켜고 끄면 노치에 표시한다 |
 | 🎵 **음악** | Music, Spotify 재생 중이면 앨범아트와 파형이 나오고, 펼치면 플레이어가 된다 |
+| ⏺ **OBS 녹화** | 녹화 중이면 노치에 빨간 점과 녹화 시간(일시정지면 주황). 전체 화면에서도 보인다. 메뉴에서 녹화 시작·정지·일시정지. OBS 에 들어 있는 obs-websocket 으로 붙고, 비밀번호는 OBS 설정에서 읽는다 |
+| 📐 **센서** | 펼친 판의 센서 탭: 화면(뚜껑) 각도와 트랙패드 저울(손가락을 댄 채 물건을 올리면 대략 그램, 영점 버튼). 탭을 연 동안에만 읽는다 |
 | 🔌 **전원** | 어댑터 연결/분리, 배터리 20% 이하 경고 |
 | 🔓 **잠금 해제** | 자물쇠가 열리는 애니메이션 |
 | 📞 **전화 · Face ID** | 영상 속 장면. 데모에서만 나온다 |
+
+메뉴 막대 아이콘에서 쓰는 도구 (따로 앱을 띄우지 않아도 되게):
+
+| 도구 | 동작 |
+|---|---|
+| 🔃 **스크롤 뒤집기** | Scroll Reverser 대신. 트랙패드와 마우스, 세로와 가로를 따로 뒤집는다. 다른 프로그램이 보낸 이벤트(화면 공유, RustDesk 등)는 건드리지 않는다 |
+| 🖱 **마우스** | Logi Options+ 대신. 엄지 버튼 = 뒤로/앞으로(⌘[ / ⌘]), 부드러운 휠, 휠 속도 3단계, Shift + 휠 = 가로 스크롤 |
+
+스크롤·마우스는 손쉬운 사용 권한이 필요하다. 다시 빌드해도 권한이 풀리지 않도록 `scripts/build-app.sh` 는 로컬 서명 인증서 "DynamicNotch Local Signing" 이 있으면 그걸로 서명한다.
 
 - 아무 활동이 없을 때 노치에 마우스를 올리면 Clawd와 미러 버튼만 살짝 나온다. 누르면 펼쳐진다. 화면 위쪽 가운데로 마우스를 옮길 때마다 큰 판이 튀어나와 가리지 않게 하기 위해서다.
 - 활동 중(음악, Claude)일 때는 호버하면 바로 펼쳐지고, 마우스가 벗어나거나 다른 곳을 클릭하면 접힌다.
@@ -93,14 +104,24 @@ Sources/
     NotchView.swift    모핑, 블러 전환, 번짐, 탭
     Clawd.swift        Clawd 캐릭터 (Canvas, 기분별 포즈)
     ClaudeViews.swift  Claude 세션/배너, 살짝보기, 미러 판
-    ActivityViews.swift 음악/통화/전원/카메라 감지/Face ID 뷰
+    ActivityViews.swift 음악/통화/전원/카메라 감지/Face ID/OBS 녹화 뷰
+    UsageView.swift    사용량 판
+    SensorViews.swift  센서 판 (화면 각도, 트랙패드 저울)
+    Sprite.swift       미리 그린 프레임을 Core Animation 으로 재생
     Demo.swift         데모 시퀀스, 앨범아트 색 추출
   DynamicNotch/      macOS 앱
     NotchPanel.swift   노치 위 투명 패널, 클릭 통과 처리
     NowPlayingProvider.swift  Music/Spotify
-    ClaudeProvider.swift      Claude Code 훅 수신 (--claude-hook)
+    ClaudeProvider.swift      Claude Code 훅 수신 (--claude-hook), 상태 줄 (--statusline)
+    CodexProvider.swift       Codex 세션 로그 읽기 (15분 넘게 조용한 '작업 중' 세션은 내림)
+    UsageProvider.swift       대화 기록으로 사용량 추정
     CameraMirror.swift        카메라 미러 (AVCapture)
-    SystemProviders.swift     전원, 잠금 해제, 카메라·마이크 사용 감지
+    SystemProviders.swift     전원, 잠금 해제, 카메라·마이크 사용, 다운로드, RustDesk
+    OBSProvider.swift         obs-websocket v5 클라이언트
+    HardwareSensors.swift     힌지 각도 센서(HID), 트랙패드 압력(MultitouchSupport)
+    ScrollReverser.swift      이벤트 탭, 스크롤 뒤집기
+    MouseTools.swift          엄지 버튼, 부드러운 휠
+    Log.swift                 ~/Library/Logs/DynamicNotch.log
 ```
 
 ## iPhone 13 Pro Max
