@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import NotchKit
 
 /// Claude Code 훅 → 노치.
@@ -21,6 +22,7 @@ enum ClaudeHook {
             "prompt": String(str("prompt").prefix(120)),
             "terminal": env["__CFBundleIdentifier"] ?? "",
             "tty": controllingTTY() ?? "",
+            "pid": claudePID().map(String.init) ?? "",
         ]
         if env["DYNAMICNOTCH_DEBUG"] != nil { FileHandle.standardError.write("\(info)\n".data(using: .utf8)!) }
         DistributedNotificationCenter.default().postNotificationName(
@@ -76,6 +78,27 @@ enum ClaudeHook {
             if let j = (try? JSONSerialization.jsonObject(with: buf)) as? [String: Any] { return j }
         }
         return (try? JSONSerialization.jsonObject(with: buf)) as? [String: Any] ?? [:]
+    }
+
+    /// 훅을 부른 claude 프로세스 (부모를 거슬러 올라가 실행 파일이 claude 인 첫 프로세스): 앱이 이 pid 가 사라지면
+    /// 세션을 지운다 (강제 종료되어 SessionEnd 가 오지 않은 경우)
+    static func claudePID() -> pid_t? {
+        var pid = getppid()
+        for _ in 0..<6 {
+            var info = kinfo_proc()
+            var size = MemoryLayout<kinfo_proc>.stride
+            var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+            guard sysctl(&mib, 4, &info, &size, nil, 0) == 0, size > 0 else { return nil }
+            // its p_comm is the version ("2.1.307"), so go by the executable: .../claude or .../claude/versions/<ver>
+            var buf = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
+            if proc_pidpath(pid, &buf, UInt32(buf.count)) > 0 {
+                let path = String(cString: buf)
+                if path.hasSuffix("/claude") || path.contains("/claude/versions/") { return pid }
+            }
+            pid = info.kp_eproc.e_ppid
+            if pid <= 1 { return nil }
+        }
+        return nil
     }
 
     /// 훅 프로세스는 stdin 이 파이프라 tty 가 없다. 부모(셸 → claude)를 거슬러 올라가 첫 tty 를 찾는다.
@@ -158,6 +181,7 @@ enum TerminalJump {
 final class ClaudeProvider {
     private let model: NotchModel
     private var lastEvent: [String: Date] = [:]
+    private var pids: [String: pid_t] = [:]          // session -> its claude process (from the hook)
     private var timer: Timer?
 
     init(model: NotchModel) {
@@ -190,6 +214,7 @@ final class ClaudeProvider {
         if let t = i["terminal"], !t.isEmpty { s.terminalBundleID = t }
         if let t = i["tty"], !t.isEmpty { s.tty = t }
         lastEvent[id] = Date()
+        if let p = i["pid"].flatMap(Int32.init) { pids[id] = p }
 
         switch i["event"] {
         case "UserPromptSubmit":
@@ -230,6 +255,7 @@ final class ClaudeProvider {
         case "SessionEnd":
             model.removeSession(id)
             lastEvent[id] = nil
+            pids[id] = nil
             return
         default:
             return
@@ -275,9 +301,11 @@ final class ClaudeProvider {
         let now = Date()
         for s in model.sessions {
             let idle = now.timeIntervalSince(lastEvent[s.id] ?? s.since)
-            if (s.state == .done && idle > 30 * 60) || idle > 3 * 3600 {
+            let gone = pids[s.id].map { kill($0, 0) != 0 && errno == ESRCH } ?? false   // claude 가 강제 종료됨
+            if gone || (s.state == .done && idle > 30 * 60) || idle > 3 * 3600 {
                 model.removeSession(s.id)
                 lastEvent[s.id] = nil
+                pids[s.id] = nil
             }
         }
     }
