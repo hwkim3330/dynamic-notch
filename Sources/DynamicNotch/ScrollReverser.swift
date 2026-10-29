@@ -113,6 +113,8 @@ private func scrollCallback(proxy: CGEventTapProxy, type: CGEventType, event: CG
         if let t = Flags.tap { CGEvent.tapEnable(tap: t, enable: true) }
         return Unmanaged.passUnretained(event)
     }
+    // 포인터가 리눅스에 가 있는 동안(Flow)은 손대지 않는다: Flow 가 원래 이벤트를 받아 리눅스로 보낸다
+    if FlowState.active { return Unmanaged.passUnretained(event) }
     // 우리가 만들어 보낸 이벤트(부드러운 휠, 단축키)는 이미 처리된 것이다
     if event.getIntegerValueField(.eventSourceUserData) == MouseFlags.marker {
         return Unmanaged.passUnretained(event)

@@ -15,6 +15,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/DynamicNotch"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 [[ -f Resources/AppIcon.icns ]] && cp Resources/AppIcon.icns "$APP/Contents/Resources/"
+cp linux/notchflow-agent.c "$APP/Contents/Resources/"   # Flow: 리눅스에서 컴파일되는 에이전트
 # 고정 서명. 임시 서명(-)은 빌드마다 서명이 바뀌어 macOS 가 다른 앱으로 보고
 # 손쉬운 사용 권한이 매번 풀렸다. 키체인에 'DynamicNotch Local Signing' 이 있으면 그걸 쓴다.
 SIGN_ID="DynamicNotch Local Signing"

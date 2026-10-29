@@ -59,6 +59,7 @@ public struct NotchView: View {
         case .transient(.faceID(let ok)), .transient(.unlock(let ok)): ok ? .green : .white
         case .transient(.sensor(let camera, let on)): on ? (camera ? .green : .orange) : .clear
         case .transient(.remote(let on)): on ? .red : .clear
+        case .transient(.flow(let on, _)): on ? .cyan : .clear
         default: .clear
         }
     }

@@ -82,6 +82,7 @@ public enum Transient: Equatable {
     case sensor(camera: Bool, on: Bool)
     case download(name: String, path: String)
     case remote(on: Bool)
+    case flow(on: Bool, name: String)
 
     var kind: String {
         switch self {
@@ -92,6 +93,7 @@ public enum Transient: Equatable {
         case .sensor: "sensor"
         case .download: "download"
         case .remote: "remote"
+        case .flow: "flow"
         }
     }
 }
@@ -296,7 +298,7 @@ public final class NotchModel: ObservableObject {
             return Layout(size: CGSize(width: n.width + 2 * 74, height: n.height), topRadius: 8, bottomRadius: 14)
         case .transient(let t):
             switch t {
-            case .battery, .sensor, .remote:
+            case .battery, .sensor, .remote, .flow:
                 return Layout(size: CGSize(width: n.width + 2 * 86, height: n.height), topRadius: 8, bottomRadius: 14)
             case .unlock, .faceID:
                 return Layout(size: CGSize(width: n.width + 24, height: n.height + 56), topRadius: 8, bottomRadius: 26)

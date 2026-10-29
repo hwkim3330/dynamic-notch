@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let model = NotchModel()
     var obs: OBSProvider!
     private var obsMenu: NSMenu!
+    private var flowMenu: NSMenu!
     var panel: NotchPanel!
     var statusItem: NSStatusItem!
     var providers: [AnyObject] = []
@@ -62,6 +63,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setupStatusItem()
         watchSleep()
         ScrollReverser.shared.start()
+        Flow.shared.model = model
+        Flow.shared.start()
 
         if let i = CommandLine.arguments.firstIndex(of: "--open"), i + 1 < CommandLine.arguments.count,
            let tab = NotchTab(rawValue: CommandLine.arguments[i + 1]) {
@@ -139,6 +142,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         mouse.submenu = msub
         menu.addItem(mouse)
+        // Flow — 리눅스와 마우스·키보드·클립보드 공유 (열 때마다 상태에 맞게 새로 만든다)
+        let flowItem = NSMenuItem(title: "Flow (리눅스와 마우스·클립보드)", action: nil, keyEquivalent: "")
+        flowMenu = NSMenu()
+        flowMenu.delegate = self
+        flowItem.submenu = flowMenu
+        menu.addItem(flowItem)
         // OBS — 녹화 상태는 노치에, 시작·정지는 여기서
         let obsItem = NSMenuItem(title: "OBS", action: nil, keyEquivalent: "")
         obsMenu = NSMenu()
@@ -162,6 +171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// OBS 메뉴는 열 때마다 상태에 맞게 새로 만든다
     func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu === flowMenu { return buildFlowMenu(menu) }
         guard menu === obsMenu else { return }
         menu.removeAllItems()
         let cfg = OBSProvider.readConfig()
@@ -199,6 +209,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             : "OBS 를 한 번 실행한 뒤 다시 시도하세요."
         NSApp.activate(ignoringOtherApps: true)
         a.runModal()
+    }
+
+    private func buildFlowMenu(_ menu: NSMenu) {
+        menu.removeAllItems()
+        let f = Flow.shared
+        let on = item("켜기", #selector(toggleFlow), ""); on.state = f.enabled ? .on : .off
+        menu.addItem(on)
+        let st = NSMenuItem(title: f.statusText, action: nil, keyEquivalent: ""); st.isEnabled = false
+        menu.addItem(st)
+        menu.addItem(.separator())
+        for (n, s) in Flow.Side.allCases.enumerated() {
+            let it = item(s.title, #selector(setFlowSide), ""); it.tag = n; it.state = f.side == s ? .on : .off
+            menu.addItem(it)
+        }
+        menu.addItem(item("리눅스 주소: \(f.host)…", #selector(editFlowHost), ""))
+        menu.addItem(.separator())
+        let tip = NSMenuItem(title: "돌아오기가 막히면 ⌃⌥⌘L · ⌘=Ctrl · 오른쪽⌥/Caps Lock=한/영", action: nil, keyEquivalent: "")
+        tip.isEnabled = false
+        menu.addItem(tip)
+    }
+
+    @objc func toggleFlow() { Flow.shared.setEnabled(!Flow.shared.enabled) }
+    @objc func setFlowSide(_ sender: NSMenuItem) { Flow.shared.setSide(Flow.Side.allCases[sender.tag]) }
+    @objc func editFlowHost() {
+        let a = NSAlert()
+        a.messageText = "리눅스 주소"
+        a.informativeText = "ssh 로 접속할 이름 (~/.ssh/config 별칭, mDNS 이름 user@이름.local, 또는 IP). 키 로그인이 되어 있어야 합니다."
+        let tf = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24)); tf.stringValue = Flow.shared.host
+        a.accessoryView = tf
+        a.addButton(withTitle: "저장"); a.addButton(withTitle: "취소")
+        NSApp.activate(ignoringOtherApps: true)
+        if a.runModal() == .alertFirstButtonReturn, !tf.stringValue.isEmpty { Flow.shared.setHost(tf.stringValue) }
     }
 
     @objc func runDemo() { NotchDemo.run(model) }

@@ -306,6 +306,16 @@ struct TransientView: View {
                 .foregroundStyle(on ? .red : .white.opacity(0.6))
                 .fixedSize()
             }
+        case .flow(let on, let name):
+            Wings {
+                Image(systemName: on ? "arrow.right.to.line" : "arrow.left.to.line")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(on ? Color.cyan : .white.opacity(0.7))
+            } right: {
+                Text(on ? name : "맥").font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(on ? Color.cyan : .white.opacity(0.7))
+                    .lineLimit(1).fixedSize()
+            }
 
         }
     }
